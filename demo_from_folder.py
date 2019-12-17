@@ -147,11 +147,12 @@ if __name__ == '__main__':
     # Setup renderer for visualization
     renderer = Renderer()
 
-    image_paths = [f for f in args.in_folder if f.endswith('.png')]
+    image_paths = [os.path.join(args.in_folder, f) for f in os.listdir(args.in_folder)
+                   if f.endswith('.png')]
     print('Predicting on all png images in {}'.format(args.in_folder))
 
     for image_path in image_paths:
-        print(image_path)
+        print("Image: ", image_path)
         # Preprocess input image and generate predictions
         bbox_path = os.path.splitext(image_path)[0] + '_bb_coords.pkl'
         assert os.path.exists(bbox_path), "Bounding boxes required for {}!".format(image_path)
