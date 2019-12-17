@@ -111,3 +111,21 @@ logs/
 
 # vim swap files
 *.swp
+
+# Pycharm
+*.idea*
+*.xml*
+*.iml*
+
+# Mac
+*.DS_Store*
+
+# Predictions
+*predictions/*
+
+# Saved models
+*.pt
+data/models/model_config.json
+
+# SMPL
+data/basicModel_neutral_lbs_10_207_0_v1.0.0.pkl

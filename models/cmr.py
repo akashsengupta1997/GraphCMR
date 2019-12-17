@@ -9,7 +9,7 @@ from models import GraphCNN, SMPLParamRegressor, SMPL
 
 class CMR(nn.Module):
 
-    def __init__(self, mesh, num_layers, num_channels, pretrained_checkpoint=None):
+    def __init__(self, mesh, num_layers, num_channels, pretrained_checkpoint=None, device=None):
         super(CMR, self).__init__()
         self.graph_cnn = GraphCNN(mesh.adjmat, mesh.ref_vertices.t(),
                                   num_layers, num_channels)
@@ -17,7 +17,7 @@ class CMR(nn.Module):
         self.smpl = SMPL()
         self.mesh = mesh
         if pretrained_checkpoint is not None:
-            checkpoint = torch.load(pretrained_checkpoint)
+            checkpoint = torch.load(pretrained_checkpoint, map_location=device)
             try:
                 self.graph_cnn.load_state_dict(checkpoint['graph_cnn'])
             except KeyError:
