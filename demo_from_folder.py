@@ -151,6 +151,7 @@ if __name__ == '__main__':
     print('Predicting on all png images in {}'.format(args.in_folder))
 
     for image_path in image_paths:
+        print(image_path)
         # Preprocess input image and generate predictions
         bbox_path = os.path.splitext(image_path)[0] + '_bb_coords.pkl'
         assert os.path.exists(bbox_path), "Bounding boxes required for {}!".format(image_path)
