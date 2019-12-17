@@ -175,7 +175,7 @@ if __name__ == '__main__':
 
     # Plot and save results
     # outfile = args.img.split('.')[0] if args.outfile is None else args.outfile
-    outfile = os.path.join("/Users/Akash_Sengupta/Documents/GitHub/GraphCMR/predictions/sports_videos/00001",
+    outfile = os.path.join("predictions/sports_videos/00001",
                            os.path.splitext(os.path.basename(args.img))[0])
     print('Saving to:', outfile)
 
