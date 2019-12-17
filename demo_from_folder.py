@@ -174,7 +174,7 @@ if __name__ == '__main__':
         # Plot and save results
         # outfile = args.img.split('.')[0] if args.outfile is None else args.outfile
         outfile = os.path.join(args.out_folder,
-                               os.path.splitext(os.path.basename(args.img))[0])
+                               os.path.splitext(os.path.basename(image_path))[0])
         print('Saving to:', outfile)
 
         plt.figure()
