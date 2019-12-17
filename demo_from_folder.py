@@ -156,7 +156,7 @@ if __name__ == '__main__':
         # Preprocess input image and generate predictions
         bbox_path = os.path.splitext(image_path)[0] + '_bb_coords.pkl'
         assert os.path.exists(bbox_path), "Bounding boxes required for {}!".format(image_path)
-        img, norm_img = process_image(image_paths, bbox_path, None, input_res=cfg.INPUT_RES)
+        img, norm_img = process_image(image_path, bbox_path, None, input_res=cfg.INPUT_RES)
         norm_img = norm_img.to(device)
         with torch.no_grad():
             pred_vertices, pred_vertices_smpl, pred_camera, _, _ = model(norm_img)
