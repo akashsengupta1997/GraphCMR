@@ -61,11 +61,11 @@ def bbox_from_json(bbox_file):
 
 
 def bbox_from_pkl(bbox_file):
+    """Bounding box from pkl file.
+    Expected format is (top_left(y), top_left(x), bottom_left(y), bottom_left(x))"""
     with open(bbox_file, 'rb') as f:
         bbox = pickle.load(f)
-        print(bbox)
         bbox = np.array(bbox[0]).astype(np.float32)
-        print(bbox)
 
     ul_corner = bbox[:2]
     # Getting bbox into the expected format...
@@ -149,7 +149,7 @@ if __name__ == '__main__':
     # Setup renderer for visualization
     renderer = Renderer()
 
-    image_paths = [os.path.join(args.in_folder, f) for f in os.listdir(args.in_folder)
+    image_paths = [os.path.join(args.in_folder, f) for f in sorted(os.listdir(args.in_folder))
                    if f.endswith('.png')]
     print('Predicting on all png images in {}'.format(args.in_folder))
 
