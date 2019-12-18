@@ -62,7 +62,9 @@ def bbox_from_json(bbox_file):
 
 def bbox_from_pkl(bbox_file):
     with open(bbox_file, 'rb') as f:
-        bbox = np.array(pickle.load(f)[0]).astype(np.float32)
+        bbox = pickle.load(f)
+        print(bbox)
+        bbox = np.array(bbox[0]).astype(np.float32)
         print(bbox)
 
     ul_corner = bbox[:2]
