@@ -25,10 +25,11 @@ os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"   # see issue #152
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--checkpoint', default=None, help='Path to pretrained checkpoint')
-parser.add_argument('--in_folder', type=str, required=True, help='Path to input images folder.')
-parser.add_argument('--out_folder', type=str, default=None,
+parser.add_argument('-checkpoint', default=None, help='Path to pretrained checkpoint')
+parser.add_argument('-in_folder', type=str, required=True, help='Path to input images folder.')
+parser.add_argument('-out_folder', type=str, default=None,
                     help='Folder to save predictions in')
+parser.add_argument('--centred', action='store_true')
 
 
 def bbox_from_openpose(openpose_file, rescale=1.2, detection_thresh=0.2):
@@ -156,8 +157,12 @@ if __name__ == '__main__':
     for image_path in image_paths:
         print("Image: ", image_path)
         # Preprocess input image and generate predictions
-        bbox_path = os.path.splitext(image_path)[0] + '_bb_coords.pkl'
-        assert os.path.exists(bbox_path), "Bounding boxes required for {}!".format(image_path)
+        if args.centred:
+            bbox_path = None
+        else:
+            bbox_path = os.path.splitext(image_path)[0] + '_bb_coords.pkl'
+            assert os.path.exists(bbox_path), "Bounding boxes required for {}!".format(
+                image_path)
         img, norm_img = process_image(image_path, bbox_path, None, input_res=cfg.INPUT_RES)
         norm_img = norm_img.to(device)
         with torch.no_grad():
