@@ -63,6 +63,7 @@ def predict_on_frames(args):
         print("Image: ", image_path)
         # Preprocess input image and generate predictions
         img, norm_img = process_image(image_path, input_res=cfg.INPUT_RES)
+        norm_img = norm_img.to(device)
         with torch.no_grad():
             pred_vertices, pred_vertices_smpl, pred_camera, _, _ = model(norm_img)
 
