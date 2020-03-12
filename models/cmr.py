@@ -5,16 +5,19 @@ It returns both the non-parametric and parametric shapes, as well as the camera 
 import torch
 import torch.nn as nn
 
-from models import GraphCNN, SMPLParamRegressor, SMPL
+import config
+from models import GraphCNN, SMPLParamRegressor
+from models.smpl_from_lib import SMPL
 
 class CMR(nn.Module):
 
-    def __init__(self, mesh, num_layers, num_channels, pretrained_checkpoint=None, device=None):
+    def __init__(self, mesh, num_layers, num_channels, batch_size=1, pretrained_checkpoint=None, device=None):
         super(CMR, self).__init__()
         self.graph_cnn = GraphCNN(mesh.adjmat, mesh.ref_vertices.t(),
                                   num_layers, num_channels)
         self.smpl_param_regressor = SMPLParamRegressor()
-        self.smpl = SMPL()
+        # self.smpl = SMPL()
+        self.smpl = SMPL(config.SMPL_MODEL_DIR, batch_size=batch_size)
         self.mesh = mesh
         if pretrained_checkpoint is not None:
             checkpoint = torch.load(pretrained_checkpoint, map_location=device)
@@ -55,5 +58,9 @@ class CMR(nn.Module):
                 pred_rotmat, pred_betas = self.smpl_param_regressor(x)
         else:
             pred_rotmat, pred_betas = self.smpl_param_regressor(x)
-        pred_vertices_smpl = self.smpl(pred_rotmat, pred_betas)
+        pred_smpl_output = self.smpl(body_pose=pred_rotmat[:, 1:, :, :],
+                                     global_orient=pred_rotmat[:, 0, :, :].unsqueeze(1),
+                                     betas=pred_betas,
+                                     pose2rot=False)
+        pred_vertices_smpl = pred_smpl_output.vertices
         return pred_vertices, pred_vertices_smpl, camera, pred_rotmat, pred_betas

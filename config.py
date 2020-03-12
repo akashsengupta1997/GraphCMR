@@ -46,6 +46,7 @@ JOINT_REGRESSOR_TRAIN_EXTRA = 'data/J_regressor_extra.npy'
 JOINT_REGRESSOR_H36M = 'data/J_regressor_h36m.npy'
 VERTEX_TEXTURE_FILE = 'data/vertex_texture.npy'
 SMPL_FILE = 'data/basicModel_neutral_lbs_10_207_0_v1.0.0.pkl'
+SMPL_MODEL_DIR = 'data/smpl'
 
 """
 Each dataset uses different sets of joints.

@@ -2,6 +2,7 @@ from __future__ import division
 import torch
 import numpy as np
 import scipy.sparse
+import pickle
 
 from models import SMPL
 from models.graph_layers import spmm
@@ -68,14 +69,22 @@ class Mesh(object):
         self.num_downsampling = num_downsampling
 
         # load template vertices from SMPL and normalize them
-        smpl = SMPL()
-        ref_vertices = smpl.v_template
+        # smpl = SMPL()
+        # ref_vertices = smpl.v_template
+        with open('data/smpl/SMPL_NEUTRAL.pkl', 'rb') as f_smpl:
+            smpl_data = pickle.load(f_smpl, encoding='latin1')
+            ref_vertices = smpl_data['v_template']
+            faces = smpl_data['f']
+            ref_vertices = torch.from_numpy(ref_vertices).float()
+            faces = torch.from_numpy(faces.astype(np.int32)).int()
+
         center = 0.5*(ref_vertices.max(dim=0)[0] + ref_vertices.min(dim=0)[0])[None]
         ref_vertices -= center
         ref_vertices /= ref_vertices.abs().max().item()
 
         self._ref_vertices = ref_vertices.to(device)
-        self.faces = smpl.faces.int().to(device)
+        # self.faces = smpl.faces.int().to(device)
+        self.faces = faces.to(device)
 
     @property
     def adjmat(self):

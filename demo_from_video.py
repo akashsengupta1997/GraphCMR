@@ -1,3 +1,10 @@
+"""
+Runs CMR on cropped and centres video frames and stores results in a pkl file.
+Basically, this script is to run CMR on cropped frames from my sports videos dataset.
+For each sport, saves results in a separate cmr_results directory within the sports videos dataset file structure.
+"""
+
+
 #!/usr/bin/python
 
 from __future__ import division
