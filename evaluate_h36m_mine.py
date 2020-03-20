@@ -8,10 +8,11 @@ import argparse
 import cv2
 
 import config
-import constants
-from models import hmr, SMPL
+from utils import Mesh
+from models import CMR
+from models.smpl_from_lib import SMPL
 from utils.pose_utils import compute_similarity_transform_batch
-from utils.geometry import orthographic_project_torch, undo_keypoint_normalisation
+from utils.cam_utils import orthographic_project_torch, undo_keypoint_normalisation
 from datasets.my_h36m_eval_dataset import H36MEvalDataset
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"   # see issue #152
@@ -44,10 +45,12 @@ def evaluate_single_in_multitasknet_h36m(model,
     J_regressor_batch = J_regressor[None, :].expand(batch_size, -1, -1).to(device)
 
     if 'pve' in metrics:
-        pve_sum = 0.0
+        pve_smpl_sum = 0.0
+        pve_graph_sum = 0.0
 
     if 'pve_pa' in metrics:
-        pve_pa_sum = 0.0
+        pve_pa_smpl_sum = 0.0
+        pve_pa_graph_sum = 0.0
 
     if 'pve-t' in metrics:
         pvet_sum = 0.0
@@ -56,16 +59,20 @@ def evaluate_single_in_multitasknet_h36m(model,
         pvet_pa_sum = 0.0
 
     if 'mpjpe' in metrics:
-        mpjpe_sum = 0.0
+        mpjpe_smpl_sum = 0.0
+        mpjpe_graph_sum = 0.0
 
     if 'j3d_rec_err' in metrics:
-        j3d_rec_err_sum = 0.0
+        j3d_rec_err_smpl_sum = 0.0
+        j3d_rec_err_graph_sum = 0.0
 
     if 'pve_2d' in metrics:
-        pve_2d_sum = 0.0
+        pve_2d_smpl_sum = 0.0
+        pve_2d_graph_sum = 0.0
 
     if 'pve_2d_pa' in metrics:
-        pve_2d_pa_sum = 0.0
+        pve_2d_pa_smpl_sum = 0.0
+        pve_2d_pa_graph_sum = 0.0
 
     num_samples = 0
     num_vertices = 6890
@@ -86,21 +93,24 @@ def evaluate_single_in_multitasknet_h36m(model,
         target_vertices = target_smpl_output.vertices
         target_reposed_smpl_output = smpl_model(betas=target_shape)
         target_reposed_vertices = target_reposed_smpl_output.vertices
-        target_joints_h36mlsp = target_joints_h36m[:, constants.H36M_TO_J14, :]
+        target_joints_h36mlsp = target_joints_h36m[:, config.H36M_TO_J14, :]
 
         # ------------------------------- PREDICTIONS -------------------------------
-        pred_rotmat, pred_betas, pred_camera = model(input)
-        pred_output = smpl_model(betas=pred_betas, body_pose=pred_rotmat[:, 1:],
-                                 global_orient=pred_rotmat[:, 0].unsqueeze(1), pose2rot=False)
-        pred_vertices = pred_output.vertices
+        pred_vertices, pred_vertices_smpl, pred_camera, pred_rotmat, pred_betas = model(input)
         pred_vertices_projected2d = orthographic_project_torch(pred_vertices, pred_camera)
         pred_vertices_projected2d = undo_keypoint_normalisation(pred_vertices_projected2d, input.shape[-1])
+        pred_vertices_smpl_projected2d = orthographic_project_torch(pred_vertices_smpl, pred_camera)
+        pred_vertices_smpl_projected2d = undo_keypoint_normalisation(pred_vertices_smpl_projected2d, input.shape[-1])
         pred_reposed_smpl_output = smpl_model(betas=pred_betas)
         pred_reposed_vertices = pred_reposed_smpl_output.vertices
 
         pred_joints_h36m = torch.matmul(J_regressor_batch, pred_vertices)
         pred_pelvis = pred_joints_h36m[:, [0], :].clone()
-        pred_joints_h36mlsp = pred_joints_h36m[:, constants.H36M_TO_J14, :] - pred_pelvis
+        pred_joints_h36mlsp = pred_joints_h36m[:, config.H36M_TO_J14, :] - pred_pelvis
+
+        pred_joints_smpl_h36m = torch.matmul(J_regressor_batch, pred_vertices_smpl)
+        pred_smpl_pelvis = pred_joints_smpl_h36m[:, [0], :].clone()
+        pred_joints_smpl_h36mlsp = pred_joints_smpl_h36m[:, config.H36M_TO_J14, :] - pred_smpl_pelvis
 
         # Numpy-fying
         target_vertices = target_vertices.cpu().detach().numpy()
@@ -108,21 +118,29 @@ def evaluate_single_in_multitasknet_h36m(model,
         target_joints_h36mlsp = target_joints_h36mlsp.cpu().detach().numpy()
 
         pred_vertices = pred_vertices.cpu().detach().numpy()
+        pred_vertices_smpl = pred_vertices_smpl.cpu().detach().numpy()
         pred_vertices_projected2d = pred_vertices_projected2d.cpu().detach().numpy()
+        pred_vertices_smpl_projected2d = pred_vertices_smpl_projected2d.cpu().detach().numpy()
         pred_reposed_vertices = pred_reposed_vertices.cpu().detach().numpy()
         pred_joints_h36mlsp = pred_joints_h36mlsp.cpu().detach().numpy()
+        pred_joints_smpl_h36mlsp = pred_joints_smpl_h36mlsp.cpu().detach().numpy()
 
         # ------------------------------- METRICS -------------------------------
+
         if 'pve' in metrics:
-            pve_batch = np.linalg.norm(pred_vertices - target_vertices,
-                                       axis=-1)  # (1, 6890)
-            pve_sum += np.sum(pve_batch)  # scalar
+            pve_smpl_batch = np.linalg.norm(pred_vertices_smpl - target_vertices, axis=-1)  # (1, 6890)
+            pve_graph_batch = np.linalg.norm(pred_vertices - target_vertices, axis=-1)
+            pve_smpl_sum += np.sum(pve_smpl_batch)  # scalar
+            pve_graph_sum += np.sum(pve_graph_batch)
 
         # Procrustes analysis
         if 'pve_pa' in metrics:
+            pred_vertices_smpl_pa = compute_similarity_transform_batch(pred_vertices_smpl, target_vertices)
             pred_vertices_pa = compute_similarity_transform_batch(pred_vertices, target_vertices)
-            pve_pa_batch = np.linalg.norm(pred_vertices_pa - target_vertices, axis=-1)  # (bs, 6890)
-            pve_pa_sum += np.sum(pve_pa_batch)  # scalar
+            pve_pa_smpl_batch = np.linalg.norm(pred_vertices_smpl_pa - target_vertices, axis=-1)  # (1, 6890)
+            pve_pa_graph_batch = np.linalg.norm(pred_vertices_pa - target_vertices, axis=-1)  # (1, 6890)
+            pve_pa_smpl_sum += np.sum(pve_pa_smpl_batch)  # scalar
+            pve_pa_graph_sum += np.sum(pve_pa_graph_batch)  # scalar
 
         if 'pve-t' in metrics:
             pvet_batch = np.linalg.norm(pred_reposed_vertices - target_reposed_vertices, axis=-1)
@@ -136,28 +154,41 @@ def evaluate_single_in_multitasknet_h36m(model,
             pvet_pa_sum += np.sum(pvet_pa_batch)  # scalar
 
         if 'mpjpe' in metrics:
-            mpjpe_batch = np.linalg.norm(pred_joints_h36mlsp - target_joints_h36mlsp, axis=-1)  # (bs, 14)
-            mpjpe_sum += np.sum(mpjpe_batch)
+            mpjpe_smpl_batch = np.linalg.norm(pred_joints_smpl_h36mlsp - target_joints_h36mlsp, axis=-1)  # (bs, 14)
+            mpjpe_graph_batch = np.linalg.norm(pred_joints_h36mlsp - target_joints_h36mlsp, axis=-1)  # (bs, 14)
+            mpjpe_smpl_sum += np.sum(mpjpe_smpl_batch)
+            mpjpe_graph_sum += np.sum(mpjpe_graph_batch)
 
         # Procrustes analysis
         if 'j3d_rec_err' in metrics:
+            pred_joints_smpl_h36mlsp_pa = compute_similarity_transform_batch(pred_joints_smpl_h36mlsp,
+                                                                             target_joints_h36mlsp)
             pred_joints_h36mlsp_pa = compute_similarity_transform_batch(pred_joints_h36mlsp, target_joints_h36mlsp)
-            j3d_rec_err_batch = np.linalg.norm(pred_joints_h36mlsp_pa - target_joints_h36mlsp, axis=-1)  # (bs, 14)
-            j3d_rec_err_sum += np.sum(j3d_rec_err_batch)
+            j3d_rec_err_smpl_batch = np.linalg.norm(pred_joints_smpl_h36mlsp_pa - target_joints_h36mlsp, axis=-1)  # (bs, 14)
+            j3d_rec_err_graph_batch = np.linalg.norm(pred_joints_h36mlsp_pa - target_joints_h36mlsp, axis=-1)  # (bs, 14)
+            j3d_rec_err_smpl_sum += np.sum(j3d_rec_err_smpl_batch)
+            j3d_rec_err_graph_sum += np.sum(j3d_rec_err_graph_batch)
 
         if 'pve_2d' in metrics:
+            pred_vertices_smpl_2d = pred_vertices_smpl[:, :, :2]
             pred_vertices_2d = pred_vertices[:, :, :2]
             target_vertices_2d = target_vertices[:, :, :2]
-            pve_2d_batch = np.linalg.norm(pred_vertices_2d - target_vertices_2d, axis=-1)  # (bs, 6890)
-            pve_2d_sum += np.sum(pve_2d_batch)
+            pve_2d_smpl_batch = np.linalg.norm(pred_vertices_smpl_2d - target_vertices_2d, axis=-1)  # (bs, 6890)
+            pve_2d_graph_batch = np.linalg.norm(pred_vertices_2d - target_vertices_2d, axis=-1)  # (bs, 6890)
+            pve_2d_smpl_sum += np.sum(pve_2d_smpl_batch)
+            pve_2d_graph_sum += np.sum(pve_2d_graph_batch)
 
         # Procrustes analysis
         if 'pve_2d_pa' in metrics:
+            pred_vertices_smpl_pa = compute_similarity_transform_batch(pred_vertices_smpl, target_vertices)
             pred_vertices_pa = compute_similarity_transform_batch(pred_vertices, target_vertices)
+            pred_vertices_smpl_2d_pa = pred_vertices_smpl_pa[:, :, :2]
             pred_vertices_2d_pa = pred_vertices_pa[:, :, :2]
             target_vertices_2d = target_vertices[:, :, :2]
-            pve_2d_pa_batch = np.linalg.norm(pred_vertices_2d_pa - target_vertices_2d, axis=-1)  # (bs, 6890)
-            pve_2d_pa_sum += np.sum(pve_2d_pa_batch)
+            pve_2d_pa_smpl_batch = np.linalg.norm(pred_vertices_smpl_2d_pa - target_vertices_2d, axis=-1)  # (bs, 6890)
+            pve_2d_pa_graph_batch = np.linalg.norm(pred_vertices_2d_pa - target_vertices_2d, axis=-1)  # (bs, 6890)
+            pve_2d_pa_smpl_sum += np.sum(pve_2d_pa_smpl_batch)
+            pve_2d_pa_graph_sum += np.sum(pve_2d_pa_graph_batch)
 
         num_samples += target_pose.shape[0]
 
@@ -178,6 +209,10 @@ def evaluate_single_in_multitasknet_h36m(model,
                     plt.imshow(vis_imgs[i])
                     plt.scatter(pred_vertices_projected2d[i, :, 0], pred_vertices_projected2d[i, :, 1], s=0.1, c='r')
 
+                    plt.subplot(343)
+                    plt.imshow(vis_imgs[i])
+                    plt.scatter(pred_vertices_smpl_projected2d[i, :, 0], pred_vertices_smpl_projected2d[i, :, 1], s=0.1, c='r')
+
                     plt.subplot(345)
                     plt.scatter(target_vertices[i, :, 0], target_vertices[i, :, 1], s=0.1, c='b')
                     plt.scatter(pred_vertices[i, :, 0], pred_vertices[i, :, 1], s=0.1, c='r')
@@ -186,16 +221,28 @@ def evaluate_single_in_multitasknet_h36m(model,
 
                     plt.subplot(346)
                     plt.scatter(target_vertices[i, :, 0], target_vertices[i, :, 1], s=0.1, c='b')
-                    plt.scatter(pred_vertices_pa[i, :, 0], pred_vertices_pa[i, :, 1], s=0.1, c='r')
+                    plt.scatter(pred_vertices_smpl[i, :, 0], pred_vertices_smpl[i, :, 1], s=0.1, c='r')
                     plt.gca().invert_yaxis()
                     plt.gca().set_aspect('equal', adjustable='box')
 
                     plt.subplot(347)
+                    plt.scatter(target_vertices[i, :, 0], target_vertices[i, :, 1], s=0.1, c='b')
+                    plt.scatter(pred_vertices_pa[i, :, 0], pred_vertices_pa[i, :, 1], s=0.1, c='r')
+                    plt.gca().invert_yaxis()
+                    plt.gca().set_aspect('equal', adjustable='box')
+
+                    plt.subplot(348)
+                    plt.scatter(target_vertices[i, :, 0], target_vertices[i, :, 1], s=0.1, c='b')
+                    plt.scatter(pred_vertices_smpl_pa[i, :, 0], pred_vertices_smpl_pa[i, :, 1], s=0.1, c='r')
+                    plt.gca().invert_yaxis()
+                    plt.gca().set_aspect('equal', adjustable='box')
+
+                    plt.subplot(349)
                     plt.scatter(target_reposed_vertices[i, :, 0], target_reposed_vertices[i, :, 1], s=0.1, c='b')
                     plt.scatter(pred_reposed_vertices_pa[i, :, 0], pred_reposed_vertices_pa[i, :, 1], s=0.1, c='r')
                     plt.gca().set_aspect('equal', adjustable='box')
 
-                    plt.subplot(349)
+                    plt.subplot(3, 4, 10)
                     for j in range(num_joints3d):
                         plt.scatter(pred_joints_h36mlsp[i, j, 0], pred_joints_h36mlsp[i, j, 1], c='r')
                         plt.scatter(target_joints_h36mlsp[i, j, 0], target_joints_h36mlsp[i, j, 1], c='b')
@@ -204,11 +251,20 @@ def evaluate_single_in_multitasknet_h36m(model,
                     plt.gca().invert_yaxis()
                     plt.gca().set_aspect('equal', adjustable='box')
 
-                    plt.subplot(3, 4, 10)
+                    plt.subplot(3, 4, 11)
                     for j in range(num_joints3d):
                         plt.scatter(pred_joints_h36mlsp_pa[i, j, 0], pred_joints_h36mlsp_pa[i, j, 1], c='r')
                         plt.scatter(target_joints_h36mlsp[i, j, 0], target_joints_h36mlsp[i, j, 1], c='b')
                         plt.text(pred_joints_h36mlsp_pa[i, j, 0], pred_joints_h36mlsp_pa[i, j, 1], s=str(j))
+                        plt.text(target_joints_h36mlsp[i, j, 0], target_joints_h36mlsp[i, j, 1], s=str(j))
+                    plt.gca().invert_yaxis()
+                    plt.gca().set_aspect('equal', adjustable='box')
+
+                    plt.subplot(3, 4, 12)
+                    for j in range(num_joints3d):
+                        plt.scatter(pred_joints_smpl_h36mlsp_pa[i, j, 0], pred_joints_smpl_h36mlsp_pa[i, j, 1], c='r')
+                        plt.scatter(target_joints_h36mlsp[i, j, 0], target_joints_h36mlsp[i, j, 1], c='b')
+                        plt.text(pred_joints_smpl_h36mlsp_pa[i, j, 0], pred_joints_smpl_h36mlsp_pa[i, j, 1], s=str(j))
                         plt.text(target_joints_h36mlsp[i, j, 0], target_joints_h36mlsp[i, j, 1], s=str(j))
                     plt.gca().invert_yaxis()
                     plt.gca().set_aspect('equal', adjustable='box')
@@ -219,12 +275,16 @@ def evaluate_single_in_multitasknet_h36m(model,
                     plt.close()
 
     if 'pve' in metrics:
-        pve = pve_sum / (num_samples * num_vertices)
-        print('PVE: {:.5f}'.format(pve))
+        pve_smpl = pve_smpl_sum / (num_samples * num_vertices)
+        print('PVE SMPL: {:.5f}'.format(pve_smpl))
+        pve_graph = pve_graph_sum / (num_samples * num_vertices)
+        print('PVE GRAPH: {:.5f}'.format(pve_graph))
 
     if 'pve_pa' in metrics:
-        pve_pa = pve_pa_sum / (num_samples * num_vertices)
-        print('PVE PA: {:.5f}'.format(pve_pa))
+        pve_pa_smpl = pve_pa_smpl_sum / (num_samples * num_vertices)
+        print('PVE PA SMPL: {:.5f}'.format(pve_pa_smpl))
+        pve_pa_graph = pve_pa_graph_sum / (num_samples * num_vertices)
+        print('PVE PA GRAPH: {:.5f}'.format(pve_pa_graph))
 
     if 'pve-t' in metrics:
         pvet = pvet_sum / (num_samples * num_vertices)
@@ -235,20 +295,28 @@ def evaluate_single_in_multitasknet_h36m(model,
         print('PVE-T PA: {:.5f}'.format(pvet_pa))
 
     if 'mpjpe' in metrics:
-        mpjpe = mpjpe_sum / (num_samples * num_joints3d)
-        print('MPJPE: {:.5f}'.format(mpjpe))
+        mpjpe_smpl = mpjpe_smpl_sum / (num_samples * num_joints3d)
+        print('MPJPE SMPL: {:.5f}'.format(mpjpe_smpl))
+        mpjpe_graph = mpjpe_graph_sum / (num_samples * num_joints3d)
+        print('MPJPE GRAPH: {:.5f}'.format(mpjpe_graph))
 
     if 'j3d_rec_err' in metrics:
-        j3d_rec_err = j3d_rec_err_sum / (num_samples * num_joints3d)
-        print('Rec Err: {:.5f}'.format(j3d_rec_err))
+        j3d_rec_err_smpl = j3d_rec_err_smpl_sum / (num_samples * num_joints3d)
+        print('Rec Err SMPL: {:.5f}'.format(j3d_rec_err_smpl))
+        j3d_rec_err_graph = j3d_rec_err_graph_sum / (num_samples * num_joints3d)
+        print('Rec Err GRAPH: {:.5f}'.format(j3d_rec_err_graph))
 
     if 'pve_2d' in metrics:
-        pve_2d = pve_2d_sum / (num_samples * num_vertices)
-        print('PVE 2D: {:.5f}'.format(pve_2d))
+        pve_2d_smpl = pve_2d_smpl_sum / (num_samples * num_vertices)
+        print('PVE 2D SMPL: {:.5f}'.format(pve_2d_smpl))
+        pve_2d_graph = pve_2d_graph_sum / (num_samples * num_vertices)
+        print('PVE 2D GRAPH: {:.5f}'.format(pve_2d_graph))
 
     if 'pve_2d_pa' in metrics:
-        pve_2d_pa = pve_2d_pa_sum / (num_samples * num_vertices)
-        print('PVE 2D PA: {:.5f}'.format(pve_2d_pa))
+        pve_2d_pa_smpl = pve_2d_pa_smpl_sum / (num_samples * num_vertices)
+        print('PVE 2D PA SMPL: {:.5f}'.format(pve_2d_pa_smpl))
+        pve_2d_pa_graph = pve_2d_pa_graph_sum / (num_samples * num_vertices)
+        print('PVE 2D PA GRAPH: {:.5f}'.format(pve_2d_pa_graph))
 
 
 if __name__ == '__main__':
@@ -263,20 +331,23 @@ if __name__ == '__main__':
     os.environ["CUDA_VISIBLE_DEVICES"] = "1"
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-    model = hmr(config.SMPL_MEAN_PARAMS).to(device)
-    checkpoint = torch.load(args.checkpoint)
-    model.load_state_dict(checkpoint['model'], strict=False)
+    # Load model
+    mesh = Mesh(device=device)
+    # Our pretrained networks have 5 residual blocks with 256 channels.
+    # You might want to change this if you use a different architecture.
+    model = CMR(mesh, 5, 256, pretrained_checkpoint=args.checkpoint, device=device)
+    model.to(device)
     model.eval()
 
     # Setup evaluation dataset
     dataset_path = '/scratch2/as2562/datasets/H36M/eval'
-    dataset = H36MEvalDataset(dataset_path, protocol=args.protocol, img_wh=constants.IMG_RES, use_subset=False)
+    dataset = H36MEvalDataset(dataset_path, protocol=args.protocol, img_wh=config.INPUT_RES, use_subset=False)
     print("Eval examples found:", len(dataset))
 
     # Metrics
     metrics = ['pve', 'pve-t', 'pve_pa', 'pve-t_pa', 'mpjpe', 'j3d_rec_err', 'pve_2d', 'pve_2d_pa']
 
-    save_path = '/data/cvfs/as2562/SPIN/evaluations/h36m_protocol{}'.format(str(args.protocol))
+    save_path = '/data/cvfs/as2562/GraphCMR/evaluations/h36m_protocol{}'.format(str(args.protocol))
     if not os.path.exists(save_path):
         os.makedirs(save_path)
 

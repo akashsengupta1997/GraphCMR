@@ -45,30 +45,34 @@ def evaluate_single_in_multitasknet_sports_videos(model,
     if 'pve' in metrics:
         pve_smpl_sum = 0.0
         pve_graph_sum = 0.0
+        pve_smpl_per_frame = []
+        pve_graph_per_frame = []
 
     if 'pve_pa' in metrics:
         pve_pa_smpl_sum = 0.0
         pve_pa_graph_sum = 0.0
+        pve_pa_smpl_per_frame = []
+        pve_pa_graph_per_frame = []
 
     if 'pve-t' in metrics:
         pvet_sum = 0.0
+        pvet_per_frame = []
 
     if 'pve-t_pa' in metrics:
         pvet_pa_sum = 0.0
+        pvet_pa_per_frame = []
 
     num_samples = 0
     num_vertices = 6890
 
-    all_frame_paths = []
-    pve_smpl_per_frame = []
-    pve_graph_per_frame = []
-    pve_pa_smpl_per_frame = []
-    pve_pa_graph_per_frame = []
-    pvet_per_frame = []
-    pvet_pa_per_frame = []
+    frame_path_per_frame = []
+    pose_per_frame = []
+    shape_per_frame = []
+    cam_per_frame = []
 
     model.eval()
     for batch_num, samples_batch in enumerate(tqdm(eval_dataloader)):
+        # ------------------------------- TARGETS and INPUTS -------------------------------
         input = samples_batch['input']
         input = input.to(device)
 
@@ -76,6 +80,13 @@ def evaluate_single_in_multitasknet_sports_videos(model,
         target_shape = target_shape.to(device)
         target_vertices = samples_batch['vertices']
 
+        target_gender = samples_batch['gender'][0]
+        if target_gender == 'm':
+            target_reposed_smpl_output = smpl_male(betas=target_shape)
+        elif target_gender == 'f':
+            target_reposed_smpl_output = smpl_female(betas=target_shape)
+        target_reposed_vertices = target_reposed_smpl_output.vertices
+        # ------------------------------- PREDICTIONS -------------------------------
         pred_vertices, pred_vertices_smpl, pred_camera, pred_rotmat, pred_betas = model(input)
         pred_vertices_projected2d = orthographic_project_torch(pred_vertices, pred_camera)
         pred_vertices_projected2d = undo_keypoint_normalisation(pred_vertices_projected2d, input.shape[-1])
@@ -83,13 +94,6 @@ def evaluate_single_in_multitasknet_sports_videos(model,
         pred_vertices_smpl_projected2d = undo_keypoint_normalisation(pred_vertices_smpl_projected2d, input.shape[-1])
         pred_reposed_smpl_output = smpl(betas=pred_betas)
         pred_reposed_vertices = pred_reposed_smpl_output.vertices
-
-        target_gender = samples_batch['gender'][0]
-        if target_gender == 'm':
-            target_reposed_smpl_output = smpl_male(betas=target_shape)
-        elif target_gender == 'f':
-            target_reposed_smpl_output = smpl_female(betas=target_shape)
-        target_reposed_vertices = target_reposed_smpl_output.vertices
 
         # Numpy-fying
         target_vertices = target_vertices.cpu().detach().numpy()
@@ -100,7 +104,11 @@ def evaluate_single_in_multitasknet_sports_videos(model,
         pred_vertices_projected2d = pred_vertices_projected2d.cpu().detach().numpy()
         pred_vertices_smpl_projected2d = pred_vertices_smpl_projected2d.cpu().detach().numpy()
         pred_reposed_vertices = pred_reposed_vertices.cpu().detach().numpy()
+        pred_rotmat = pred_rotmat.cpu().detach().numpy()
+        pred_betas = pred_betas.cpu().detach().numpy()
+        pred_camera = pred_camera.cpu().detach().numpy()
 
+        # ------------------------------- METRICS -------------------------------
         if 'pve' in metrics:
             pve_smpl_batch = np.linalg.norm(pred_vertices_smpl - target_vertices,
                                             axis=-1)  # (1, 6890)
@@ -108,8 +116,8 @@ def evaluate_single_in_multitasknet_sports_videos(model,
                                              axis=-1)
             pve_smpl_sum += np.sum(pve_smpl_batch)  # scalar
             pve_graph_sum += np.sum(pve_graph_batch)
-            pve_smpl_per_frame.append(np.mean(pve_smpl_batch))
-            pve_graph_per_frame.append(np.mean(pve_graph_batch))
+            pve_smpl_per_frame.append(np.mean(pve_smpl_batch, axis=-1))
+            pve_graph_per_frame.append(np.mean(pve_graph_batch, axis=-1))
 
         # Procrustes analysis
         if 'pve_pa' in metrics:
@@ -119,13 +127,13 @@ def evaluate_single_in_multitasknet_sports_videos(model,
             pve_pa_graph_batch = np.linalg.norm(pred_vertices_pa - target_vertices, axis=-1)  # (1, 6890)
             pve_pa_smpl_sum += np.sum(pve_pa_smpl_batch)  # scalar
             pve_pa_graph_sum += np.sum(pve_pa_graph_batch)  # scalar
-            pve_pa_smpl_per_frame.append(np.mean(pve_pa_smpl_batch))
-            pve_pa_graph_per_frame.append(np.mean(pve_pa_graph_batch))
+            pve_pa_smpl_per_frame.append(np.mean(pve_pa_smpl_batch, axis=-1))
+            pve_pa_graph_per_frame.append(np.mean(pve_pa_graph_batch, axis=-1))
 
         if 'pve-t' in metrics:
             pvet_batch = np.linalg.norm(pred_reposed_vertices - target_reposed_vertices, axis=-1)
             pvet_sum += np.sum(pvet_batch)
-            pvet_per_frame.append(np.mean(pvet_batch))
+            pvet_per_frame.append(np.mean(pvet_batch, axis=-1))
 
         # Procrustes analysis
         if 'pve-t_pa' in metrics:
@@ -133,14 +141,17 @@ def evaluate_single_in_multitasknet_sports_videos(model,
                                                                           target_reposed_vertices)
             pvet_pa_batch = np.linalg.norm(pred_reposed_vertices_pa - target_reposed_vertices, axis=-1)  # (1, 6890)
             pvet_pa_sum += np.sum(pvet_pa_batch)  # scalar
-            pvet_pa_per_frame.append(np.mean(pvet_pa_batch))
+            pvet_pa_per_frame.append(np.mean(pvet_pa_batch, axis=-1))
 
         num_samples += target_shape.shape[0]
 
         frame_path = samples_batch['frame_path']
-        all_frame_paths.append(frame_path)
+        frame_path_per_frame .append(frame_path)
+        pose_per_frame.append(pred_rotmat)
+        shape_per_frame.append(pred_betas)
+        cam_per_frame.append(pred_camera)
 
-        # Visualise
+        # ------------------------------- VISUALISE -------------------------------
         if batch_num % vis_every_n_batches == 0:
             vis_imgs = samples_batch['vis_img'].numpy()
             vis_imgs = np.transpose(vis_imgs, [0, 2, 3, 1])
@@ -200,48 +211,73 @@ def evaluate_single_in_multitasknet_sports_videos(model,
                 plt.savefig(save_fig_path, bbox_inches='tight')
                 plt.close()
 
+    # ------------------------------- DISPLAY METRICS AND SAVE PER-FRAME METRICS -------------------------------
+    frame_path_per_frame = np.concatenate(frame_path_per_frame, axis=0)
+    np.save(os.path.join(save_path, 'fname_per_frame.npy'), frame_path_per_frame)
+
+    pose_per_frame = np.concatenate(pose_per_frame, axis=0)
+    np.save(os.path.join(save_path, 'pose_per_frame.npy'), pose_per_frame)
+
+    shape_per_frame = np.concatenate(shape_per_frame, axis=0)
+    np.save(os.path.join(save_path, 'shape_per_frame.npy'), shape_per_frame)
+
+    cam_per_frame = np.concatenate(cam_per_frame, axis=0)
+    np.save(os.path.join(save_path, 'cam_per_frame.npy'), cam_per_frame)
+
     if 'pve' in metrics:
         pve_smpl = pve_smpl_sum / (num_samples * num_vertices)
         print('PVE SMPL: {:.5f}'.format(pve_smpl))
         pve_graph = pve_graph_sum / (num_samples * num_vertices)
         print('PVE GRAPH: {:.5f}'.format(pve_graph))
+        pve_smpl_per_frame = np.concatenate(pve_smpl_per_frame, axis=0)
+        pve_graph_per_frame = np.concatenate(pve_graph_per_frame, axis=0)
+        np.save(os.path.join(save_path, 'pve_per_frame.npy'), pve_smpl_per_frame)
+        np.save(os.path.join(save_path, 'pve_graph_per_frame.npy'), pve_graph_per_frame)
 
     if 'pve_pa' in metrics:
         pve_pa_smpl = pve_pa_smpl_sum / (num_samples * num_vertices)
         print('PVE PA SMPL: {:.5f}'.format(pve_pa_smpl))
         pve_pa_graph = pve_pa_graph_sum / (num_samples * num_vertices)
         print('PVE PA GRAPH: {:.5f}'.format(pve_pa_graph))
+        pve_pa_smpl_per_frame = np.concatenate(pve_pa_smpl_per_frame, axis=0)
+        pve_pa_graph_per_frame = np.concatenate(pve_pa_graph_per_frame, axis=0)
+        np.save(os.path.join(save_path, 'pve_pa_per_frame.npy'), pve_pa_smpl_per_frame)
+        np.save(os.path.join(save_path, 'pve_pa_graph_per_frame.npy'), pve_pa_graph_per_frame)
 
     if 'pve-t' in metrics:
         pvet = pvet_sum / (num_samples * num_vertices)
         print('PVE-T: {:.5f}'.format(pvet))
+        pvet_per_frame = np.concatenate(pvet_per_frame, axis=0)
+        np.save(os.path.join(save_path, 'pvet_per_frame.npy'), pvet_per_frame)
 
     if 'pve-t_pa' in metrics:
         pvet_pa = pvet_pa_sum / (num_samples * num_vertices)
         print('PVE-T PA: {:.5f}'.format(pvet_pa))
+        pvet_pa_per_frame = np.concatenate(pvet_pa_per_frame, axis=0)
+        np.save(os.path.join(save_path, 'pvet_pa_per_frame.npy'), pvet_pa_per_frame)
 
-        # Save per frame metrics
-    metrics_save_file = os.path.join(save_path, 'metrics.txt')
-    with open(metrics_save_file, 'w') as f_metrics:
-        for i in range(len(all_frame_paths)):
-            f_metrics.write('{} PVE SMPL: {:.5f} PVE GRAPH: {:.5f} '
-                            'PVE PA SMPL: {:.5f} PVE PA GRAPH: {:.5f} '
-                            'PVE-T: {:.5f} PVE-T PA: {:.5f}\n'.format(all_frame_paths[i],
-                                                                      pve_smpl_per_frame[i],
-                                                                      pve_graph_per_frame[i],
-                                                                      pve_pa_smpl_per_frame[i],
-                                                                      pve_pa_graph_per_frame[i],
-                                                                      pvet_per_frame[i],
-                                                                      pvet_pa_per_frame[
-                                                                          i]))
-        f_metrics.write('Full dataset metrics: '
-                        'PVE SMPL: {:.5f} PVE GRAPH: {:.5f} PVE PA SMPL: {:.5f} PVE PA GRAPH: {:.5f} '
-                        'PVE-T: {:.5f} PVE-T PA: {:.5f}\n'.format(pve_smpl,
-                                                                  pve_graph,
-                                                                  pve_pa_smpl,
-                                                                  pve_pa_graph,
-                                                                  pvet,
-                                                                  pvet_pa))
+    #     # Save per frame metrics
+    # metrics_save_file = os.path.join(save_path, 'metrics.txt')
+    # with open(metrics_save_file, 'w') as f_metrics:
+    #     for i in range(len(frame_path_per_frame )):
+    #         f_metrics.write('{} PVE SMPL: {:.5f} PVE GRAPH: {:.5f} '
+    #                         'PVE PA SMPL: {:.5f} PVE PA GRAPH: {:.5f} '
+    #                         'PVE-T: {:.5f} PVE-T PA: {:.5f}\n'.format(frame_path_per_frame [i],
+    #                                                                   pve_smpl_per_frame[i],
+    #                                                                   pve_graph_per_frame[i],
+    #                                                                   pve_pa_smpl_per_frame[i],
+    #                                                                   pve_pa_graph_per_frame[i],
+    #                                                                   pvet_per_frame[i],
+    #                                                                   pvet_pa_per_frame[
+    #                                                                       i]))
+    #     f_metrics.write('Full dataset metrics: '
+    #                     'PVE SMPL: {:.5f} PVE GRAPH: {:.5f} PVE PA SMPL: {:.5f} PVE PA GRAPH: {:.5f} '
+    #                     'PVE-T: {:.5f} PVE-T PA: {:.5f}\n'.format(pve_smpl,
+    #                                                               pve_graph,
+    #                                                               pve_pa_smpl,
+    #                                                               pve_pa_graph,
+    #                                                               pvet,
+    #                                                               pvet_pa))
 
 
 if __name__ == '__main__':
@@ -264,14 +300,14 @@ if __name__ == '__main__':
     model.eval()
 
     # Setup evaluation dataset
-    dataset_path = '/scratch2/as2562/datasets/sports_videos_smpl/draft_dataset1'
+    dataset_path = '/scratch2/as2562/datasets/sports_videos_smpl/final_dataset'
     dataset = SportsVideosEvalDataset(dataset_path, img_wh=config.INPUT_RES)
     print("Eval examples found:", len(dataset))
 
     # Metrics
     metrics = ['pve', 'pve-t', 'pve_pa', 'pve-t_pa']
 
-    save_path = '/data/cvfs/as2562/GraphCMR/evaluations/sports_videos_draft_dataset1'
+    save_path = '/data/cvfs/as2562/GraphCMR/evaluations/sports_videos_final_dataset'
     if not os.path.exists(save_path):
         os.makedirs(save_path)
 
