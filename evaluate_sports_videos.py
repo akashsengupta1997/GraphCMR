@@ -256,11 +256,11 @@ def evaluate_single_in_multitasknet_sports_videos(model,
         np.save(os.path.join(save_path, 'pve_per_frame.npy'), pve_smpl_per_frame)
         np.save(os.path.join(save_path, 'pve_graph_per_frame.npy'), pve_graph_per_frame)
 
-    if 'pve' in metrics:
+    if 'pve_scale_corrected' in metrics:
         pve_sc_smpl = pve_scale_corrected_smpl_sum / (num_samples * num_vertices)
-        print('PVE SMPL: {:.5f}'.format(pve_sc_smpl))
+        print('PVE SC SMPL: {:.5f}'.format(pve_sc_smpl))
         pve_sc_graph = pve_scale_corrected_graph_sum / (num_samples * num_vertices)
-        print('PVE GRAPH: {:.5f}'.format(pve_sc_graph))
+        print('PVE SC GRAPH: {:.5f}'.format(pve_sc_graph))
         pve_scale_corrected_smpl_per_frame = np.concatenate(pve_scale_corrected_smpl_per_frame,
                                                             axis=0)
         pve_scale_corrected_graph_per_frame = np.concatenate(pve_scale_corrected_graph_per_frame,

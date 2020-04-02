@@ -406,9 +406,9 @@ def evaluate_single_in_multitasknet_h36m(model,
 
     if 'pve_2d_scale_corrected' in metrics:
         pve_2d_sc_smpl = pve_2d_scale_corrected_smpl_sum / (num_samples * num_vertices)
-        print('PVE 2D SMPL: {:.5f}'.format(pve_2d_sc_smpl))
+        print('PVE 2D SC SMPL: {:.5f}'.format(pve_2d_sc_smpl))
         pve_2d_sc_graph = pve_2d_scale_corrected_graph_sum / (num_samples * num_vertices)
-        print('PVE 2D GRAPH: {:.5f}'.format(pve_2d_sc_graph))
+        print('PVE 2D SC GRAPH: {:.5f}'.format(pve_2d_sc_graph))
 
     if 'pve_2d_pa' in metrics:
         pve_2d_pa_smpl = pve_2d_pa_smpl_sum / (num_samples * num_vertices)
