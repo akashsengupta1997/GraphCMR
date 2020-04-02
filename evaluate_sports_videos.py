@@ -11,7 +11,7 @@ import config
 from utils import Mesh
 from models import CMR
 from models.smpl_from_lib import SMPL
-from utils.pose_utils import compute_similarity_transform_batch
+from utils.pose_utils import compute_similarity_transform_batch, scale_and_translation_transform_batch
 from utils.cam_utils import orthographic_project_torch, undo_keypoint_normalisation
 from datasets.sports_videos_eval_dataset import SportsVideosEvalDataset
 
@@ -48,6 +48,12 @@ def evaluate_single_in_multitasknet_sports_videos(model,
         pve_smpl_per_frame = []
         pve_graph_per_frame = []
 
+    if 'pve_scale_corrected' in metrics:
+        pve_scale_corrected_smpl_sum = 0.0
+        pve_scale_corrected_graph_sum = 0.0
+        pve_scale_corrected_smpl_per_frame = []
+        pve_scale_corrected_graph_per_frame = []
+
     if 'pve_pa' in metrics:
         pve_pa_smpl_sum = 0.0
         pve_pa_graph_sum = 0.0
@@ -58,9 +64,9 @@ def evaluate_single_in_multitasknet_sports_videos(model,
         pvet_sum = 0.0
         pvet_per_frame = []
 
-    if 'pve-t_pa' in metrics:
-        pvet_pa_sum = 0.0
-        pvet_pa_per_frame = []
+    if 'pve-t_scale_corrected' in metrics:
+        pvet_scale_corrected_sum = 0.0
+        pvet_scale_corrected_per_frame = []
 
     num_samples = 0
     num_vertices = 6890
@@ -119,6 +125,21 @@ def evaluate_single_in_multitasknet_sports_videos(model,
             pve_smpl_per_frame.append(np.mean(pve_smpl_batch, axis=-1))
             pve_graph_per_frame.append(np.mean(pve_graph_batch, axis=-1))
 
+        # Scale and translation correction
+        if 'pve_scale_corrected' in metrics:
+            pred_vertices_smpl_sc = scale_and_translation_transform_batch(pred_vertices_smpl,
+                                                                          target_vertices)
+            pred_vertices_sc = scale_and_translation_transform_batch(pred_vertices,
+                                                                     target_vertices)
+            pve_sc_smpl_batch = np.linalg.norm(pred_vertices_smpl_sc - target_vertices,
+                                               axis=-1)  # (1, 6890)
+            pve_sc_graph_batch = np.linalg.norm(pred_vertices_sc - target_vertices,
+                                                axis=-1)  # (1, 6890)
+            pve_scale_corrected_smpl_sum += np.sum(pve_sc_smpl_batch)  # scalar
+            pve_scale_corrected_graph_sum += np.sum(pve_sc_graph_batch)  # scalar
+            pve_scale_corrected_smpl_per_frame.append(np.mean(pve_sc_smpl_batch, axis=-1))
+            pve_scale_corrected_graph_per_frame.append(np.mean(pve_sc_graph_batch, axis=-1))
+
         # Procrustes analysis
         if 'pve_pa' in metrics:
             pred_vertices_smpl_pa = compute_similarity_transform_batch(pred_vertices_smpl, target_vertices)
@@ -136,12 +157,12 @@ def evaluate_single_in_multitasknet_sports_videos(model,
             pvet_per_frame.append(np.mean(pvet_batch, axis=-1))
 
         # Procrustes analysis
-        if 'pve-t_pa' in metrics:
-            pred_reposed_vertices_pa = compute_similarity_transform_batch(pred_reposed_vertices,
+        if 'pve-t_scale_corrected' in metrics:
+            pred_reposed_vertices_sc = compute_similarity_transform_batch(pred_reposed_vertices,
                                                                           target_reposed_vertices)
-            pvet_pa_batch = np.linalg.norm(pred_reposed_vertices_pa - target_reposed_vertices, axis=-1)  # (1, 6890)
-            pvet_pa_sum += np.sum(pvet_pa_batch)  # scalar
-            pvet_pa_per_frame.append(np.mean(pvet_pa_batch, axis=-1))
+            pvet_sc_batch = np.linalg.norm(pred_reposed_vertices_sc - target_reposed_vertices, axis=-1)  # (1, 6890)
+            pvet_scale_corrected_sum += np.sum(pvet_sc_batch)  # scalar
+            pvet_scale_corrected_per_frame.append(np.mean(pvet_sc_batch, axis=-1))
 
         num_samples += target_shape.shape[0]
 
@@ -156,60 +177,59 @@ def evaluate_single_in_multitasknet_sports_videos(model,
             vis_imgs = samples_batch['vis_img'].numpy()
             vis_imgs = np.transpose(vis_imgs, [0, 2, 3, 1])
 
-            for i in range(1):
-                plt.figure(figsize=(12, 8))
-                plt.subplot(331)
-                plt.imshow(vis_imgs[i])
+            plt.figure(figsize=(12, 8))
+            plt.subplot(331)
+            plt.imshow(vis_imgs[0])
 
-                plt.subplot(332)
-                plt.imshow(vis_imgs[i])
-                plt.scatter(pred_vertices_projected2d[i, :, 0], pred_vertices_projected2d[i, :, 1], s=0.1, c='r')
+            plt.subplot(332)
+            plt.imshow(vis_imgs[0])
+            plt.scatter(pred_vertices_projected2d[0, :, 0], pred_vertices_projected2d[0, :, 1], s=0.1, c='r')
 
-                plt.subplot(333)
-                plt.imshow(vis_imgs[i])
-                plt.scatter(pred_vertices_smpl_projected2d[i, :, 0], pred_vertices_smpl_projected2d[i, :, 1], s=0.1, c='r')
+            plt.subplot(333)
+            plt.imshow(vis_imgs[0])
+            plt.scatter(pred_vertices_smpl_projected2d[0, :, 0], pred_vertices_smpl_projected2d[0, :, 1], s=0.1, c='r')
 
-                plt.subplot(334)
-                plt.scatter(target_vertices[i, :, 0], target_vertices[i, :, 1], s=0.1, c='b')
-                plt.scatter(pred_vertices[i, :, 0], pred_vertices[i, :, 1], s=0.05, c='r')
-                plt.gca().invert_yaxis()
-                plt.gca().set_aspect('equal', adjustable='box')
+            plt.subplot(334)
+            plt.scatter(target_vertices[0, :, 0], target_vertices[0, :, 1], s=0.1, c='b')
+            plt.scatter(pred_vertices[0, :, 0], pred_vertices[0, :, 1], s=0.05, c='r')
+            plt.gca().invert_yaxis()
+            plt.gca().set_aspect('equal', adjustable='box')
 
-                plt.subplot(335)
-                plt.scatter(target_vertices[i, :, 0], target_vertices[i, :, 1], s=0.1, c='b')
-                plt.scatter(pred_vertices_smpl[i, :, 0], pred_vertices_smpl[i, :, 1], s=0.05, c='r')
-                plt.gca().invert_yaxis()
-                plt.gca().set_aspect('equal', adjustable='box')
+            plt.subplot(335)
+            plt.scatter(target_vertices[0, :, 0], target_vertices[0, :, 1], s=0.1, c='b')
+            plt.scatter(pred_vertices_smpl[0, :, 0], pred_vertices_smpl[0, :, 1], s=0.05, c='r')
+            plt.gca().invert_yaxis()
+            plt.gca().set_aspect('equal', adjustable='box')
 
-                plt.subplot(336)
-                plt.scatter(target_vertices[i, :, 0], target_vertices[i, :, 1], s=0.1, c='b')
-                plt.scatter(pred_vertices_pa[i, :, 0], pred_vertices_pa[i, :, 1], s=0.05, c='r')
-                plt.gca().invert_yaxis()
-                plt.gca().set_aspect('equal', adjustable='box')
+            plt.subplot(336)
+            plt.scatter(target_vertices[0, :, 0], target_vertices[0, :, 1], s=0.1, c='b')
+            plt.scatter(pred_vertices_pa[0, :, 0], pred_vertices_pa[0, :, 1], s=0.05, c='r')
+            plt.gca().invert_yaxis()
+            plt.gca().set_aspect('equal', adjustable='box')
 
-                plt.subplot(337)
-                plt.scatter(target_vertices[i, :, 0], target_vertices[i, :, 1], s=0.1, c='b')
-                plt.scatter(pred_vertices_smpl_pa[i, :, 0], pred_vertices_smpl_pa[i, :, 1], s=0.05, c='r')
-                plt.gca().invert_yaxis()
-                plt.gca().set_aspect('equal', adjustable='box')
+            plt.subplot(337)
+            plt.scatter(target_vertices[0, :, 0], target_vertices[0, :, 1], s=0.1, c='b')
+            plt.scatter(pred_vertices_smpl_pa[0, :, 0], pred_vertices_smpl_pa[0, :, 1], s=0.05, c='r')
+            plt.gca().invert_yaxis()
+            plt.gca().set_aspect('equal', adjustable='box')
 
-                plt.subplot(338)
-                plt.scatter(target_reposed_vertices[i, :, 0], target_reposed_vertices[i, :, 1], s=0.1, c='b')
-                plt.scatter(pred_reposed_vertices[i, :, 0], pred_reposed_vertices[i, :, 1], s=0.05, c='r')
-                plt.gca().set_aspect('equal', adjustable='box')
+            plt.subplot(338)
+            plt.scatter(target_reposed_vertices[0, :, 0], target_reposed_vertices[0, :, 1], s=0.1, c='b')
+            plt.scatter(pred_reposed_vertices[0, :, 0], pred_reposed_vertices[0, :, 1], s=0.05, c='r')
+            plt.gca().set_aspect('equal', adjustable='box')
 
-                plt.subplot(339)
-                plt.scatter(target_reposed_vertices[i, :, 0], target_reposed_vertices[i, :, 1], s=0.1, c='b')
-                plt.scatter(pred_reposed_vertices_pa[i, :, 0], pred_reposed_vertices_pa[i, :, 1], s=0.05, c='r')
-                plt.gca().set_aspect('equal', adjustable='box')
+            plt.subplot(339)
+            plt.scatter(target_reposed_vertices[0, :, 0], target_reposed_vertices[0, :, 1], s=0.1, c='b')
+            plt.scatter(pred_reposed_vertices_sc[0, :, 0], pred_reposed_vertices_sc[0, :, 1], s=0.05, c='r')
+            plt.gca().set_aspect('equal', adjustable='box')
 
-                # plt.show()
-                split_path = frame_path[i].split('/')
-                clip_name = split_path[-3]
-                frame_num = split_path[-1]
-                save_fig_path = os.path.join(save_path, clip_name + '_' + frame_num)
-                plt.savefig(save_fig_path, bbox_inches='tight')
-                plt.close()
+            # plt.show()
+            split_path = frame_path[0].split('/')
+            clip_name = split_path[-3]
+            frame_num = split_path[-1]
+            save_fig_path = os.path.join(save_path, clip_name + '_' + frame_num)
+            plt.savefig(save_fig_path, bbox_inches='tight')
+            plt.close()
 
     # ------------------------------- DISPLAY METRICS AND SAVE PER-FRAME METRICS -------------------------------
     frame_path_per_frame = np.concatenate(frame_path_per_frame, axis=0)
@@ -234,6 +254,18 @@ def evaluate_single_in_multitasknet_sports_videos(model,
         np.save(os.path.join(save_path, 'pve_per_frame.npy'), pve_smpl_per_frame)
         np.save(os.path.join(save_path, 'pve_graph_per_frame.npy'), pve_graph_per_frame)
 
+    if 'pve' in metrics:
+        pve_sc_smpl = pve_scale_corrected_smpl_sum / (num_samples * num_vertices)
+        print('PVE SMPL: {:.5f}'.format(pve_sc_smpl))
+        pve_sc_graph = pve_scale_corrected_graph_sum / (num_samples * num_vertices)
+        print('PVE GRAPH: {:.5f}'.format(pve_sc_graph))
+        pve_scale_corrected_smpl_per_frame = np.concatenate(pve_scale_corrected_smpl_per_frame,
+                                                            axis=0)
+        pve_scale_corrected_graph_per_frame = np.concatenate(pve_scale_corrected_graph_per_frame,
+                                                             axis=0)
+        np.save(os.path.join(save_path, 'pve_scale_corrected_per_frame.npy'), pve_scale_corrected_smpl_per_frame)
+        np.save(os.path.join(save_path, 'pve_scale_corrected_graph_per_frame.npy'), pve_scale_corrected_graph_per_frame)
+
     if 'pve_pa' in metrics:
         pve_pa_smpl = pve_pa_smpl_sum / (num_samples * num_vertices)
         print('PVE PA SMPL: {:.5f}'.format(pve_pa_smpl))
@@ -250,34 +282,11 @@ def evaluate_single_in_multitasknet_sports_videos(model,
         pvet_per_frame = np.concatenate(pvet_per_frame, axis=0)
         np.save(os.path.join(save_path, 'pvet_per_frame.npy'), pvet_per_frame)
 
-    if 'pve-t_pa' in metrics:
-        pvet_pa = pvet_pa_sum / (num_samples * num_vertices)
-        print('PVE-T PA: {:.5f}'.format(pvet_pa))
-        pvet_pa_per_frame = np.concatenate(pvet_pa_per_frame, axis=0)
-        np.save(os.path.join(save_path, 'pvet_pa_per_frame.npy'), pvet_pa_per_frame)
-
-    #     # Save per frame metrics
-    # metrics_save_file = os.path.join(save_path, 'metrics.txt')
-    # with open(metrics_save_file, 'w') as f_metrics:
-    #     for i in range(len(frame_path_per_frame )):
-    #         f_metrics.write('{} PVE SMPL: {:.5f} PVE GRAPH: {:.5f} '
-    #                         'PVE PA SMPL: {:.5f} PVE PA GRAPH: {:.5f} '
-    #                         'PVE-T: {:.5f} PVE-T PA: {:.5f}\n'.format(frame_path_per_frame [i],
-    #                                                                   pve_smpl_per_frame[i],
-    #                                                                   pve_graph_per_frame[i],
-    #                                                                   pve_pa_smpl_per_frame[i],
-    #                                                                   pve_pa_graph_per_frame[i],
-    #                                                                   pvet_per_frame[i],
-    #                                                                   pvet_pa_per_frame[
-    #                                                                       i]))
-    #     f_metrics.write('Full dataset metrics: '
-    #                     'PVE SMPL: {:.5f} PVE GRAPH: {:.5f} PVE PA SMPL: {:.5f} PVE PA GRAPH: {:.5f} '
-    #                     'PVE-T: {:.5f} PVE-T PA: {:.5f}\n'.format(pve_smpl,
-    #                                                               pve_graph,
-    #                                                               pve_pa_smpl,
-    #                                                               pve_pa_graph,
-    #                                                               pvet,
-    #                                                               pvet_pa))
+    if 'pve-t_scale_corrected' in metrics:
+        pvet_sc = pvet_scale_corrected_sum / (num_samples * num_vertices)
+        print('PVE-T SC: {:.5f}'.format(pvet_sc))
+        pvet_scale_corrected_per_frame = np.concatenate(pvet_scale_corrected_per_frame, axis=0)
+        np.save(os.path.join(save_path, 'pvet_scale_corrected_per_frame.npy'), pvet_scale_corrected_per_frame)
 
 
 if __name__ == '__main__':
@@ -305,7 +314,7 @@ if __name__ == '__main__':
     print("Eval examples found:", len(dataset))
 
     # Metrics
-    metrics = ['pve', 'pve-t', 'pve_pa', 'pve-t_pa']
+    metrics = ['pve', 'pve_scale_corrected', 'pve_pa', 'pve-t', 'pve-t_scale_corrected']
 
     save_path = '/data/cvfs/as2562/GraphCMR/evaluations/sports_videos_final_dataset'
     if not os.path.exists(save_path):
