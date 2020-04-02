@@ -365,7 +365,7 @@ if __name__ == '__main__':
                                          metrics=metrics,
                                          device=device,
                                          vis_save_path=save_path,
-                                         num_workers=args.num_workers,
+                                         num_workers=4,
                                          pin_memory=True,
                                          vis_every_n_batches=1000)
 
