@@ -117,12 +117,10 @@ def evaluate_single_in_multitasknet_3dpw(model,
         pred_reposed_vertices = pred_reposed_smpl_output.vertices
 
         pred_joints_h36m = torch.matmul(J_regressor_batch, pred_vertices)
-        pred_pelvis = pred_joints_h36m[:, [0], :].clone()
-        pred_joints_h36mlsp = pred_joints_h36m[:, config.H36M_TO_J14, :] - pred_pelvis
+        pred_joints_h36mlsp = pred_joints_h36m[:, config.H36M_TO_J14, :]
 
         pred_joints_smpl_h36m = torch.matmul(J_regressor_batch, pred_vertices_smpl)
-        pred_smpl_pelvis = pred_joints_smpl_h36m[:, [0], :].clone()
-        pred_joints_smpl_h36mlsp = pred_joints_smpl_h36m[:, config.H36M_TO_J14, :] - pred_smpl_pelvis
+        pred_joints_smpl_h36mlsp = pred_joints_smpl_h36m[:, config.H36M_TO_J14, :]
 
         # Numpy-fying
         target_vertices = target_vertices.cpu().detach().numpy()
