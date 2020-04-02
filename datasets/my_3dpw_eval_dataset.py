@@ -9,33 +9,24 @@ from torchvision.transforms import Normalize
 import config
 
 
-class H36MEvalDataset(Dataset):
-    def __init__(self, h36m_dir_path, protocol, img_wh, use_subset=False):
-        super(H36MEvalDataset, self).__init__()
+class PW3DEvalDataset(Dataset):
+    def __init__(self, pw3d_dir_path, img_wh):
+        super(PW3DEvalDataset, self).__init__()
 
         # Paths
-        cropped_frames_dir = os.path.join(h36m_dir_path, 'cropped_frames')
+        cropped_frames_dir = os.path.join(pw3d_dir_path, 'cropped_frames')
 
         # Data
-        data = np.load(os.path.join(h36m_dir_path,
-                                    'h36m_with_smpl_valid_protocol{}.npz').format(str(protocol)))
-
+        data = np.load(os.path.join(pw3d_dir_path, '3dpw_test.npz'))
         self.frame_fnames = data['imgname']
-        self.joints3d = data['S']
         self.pose = data['pose']
-        self.shape = data['betas']
-
-        if use_subset:  # Evaluate on a subset of 200 samples
-            all_indices = np.arange(len(self.frame_fnames))
-            chosen_indices = np.random.choice(all_indices, 200, replace=False)
-            self.frame_fnames = self.frame_fnames[chosen_indices]
-            self.joints3d = self.joints3d[chosen_indices]
-            self.pose = self.pose[chosen_indices]
-            self.shape = self.shape[chosen_indices]
+        self.shape = data['shape']
+        self.gender = data['gender']
 
         self.cropped_frames_dir = cropped_frames_dir
         self.img_wh = img_wh
-        self.normalize_img = Normalize(mean=config.IMG_NORM_MEAN, std=config.IMG_NORM_STD)
+        self.normalize_img = Normalize(mean=config.IMG_NORM_MEAN,
+                                       std=config.IMG_NORM_STD)
 
     def __len__(self):
         return len(self.frame_fnames)
@@ -53,12 +44,11 @@ class H36MEvalDataset(Dataset):
         img = np.transpose(img, [2, 0, 1])/255.0
 
         # Targets
-        joints3d = self.joints3d[index]
         pose = self.pose[index]
         shape = self.shape[index]
+        gender = self.gender[index]
 
         img = torch.from_numpy(img).float()
-        joints3d = torch.from_numpy(joints3d).float()
         pose = torch.from_numpy(pose).float()
         shape = torch.from_numpy(shape).float()
 
@@ -66,10 +56,10 @@ class H36MEvalDataset(Dataset):
 
         return {'input': input,
                 'vis_img': img,
-                'target_j3d': joints3d,
                 'pose': pose,
                 'shape': shape,
-                'fname': fname}
+                'fname': fname,
+                'gender': gender}
 
 
 
