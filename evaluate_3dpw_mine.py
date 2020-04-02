@@ -331,15 +331,12 @@ def evaluate_single_in_multitasknet_3dpw(model,
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--checkpoint', default=None, help='Path to network checkpoint')
-    parser.add_argument('--gpu', default="0", type=int, help='GPU')
+    parser.add_argument('--gpu', default="0", type=str, help='GPU')
     args = parser.parse_args()
-
-    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
-    os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
 
     # Device
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
-    os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+    os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
     # Load model
