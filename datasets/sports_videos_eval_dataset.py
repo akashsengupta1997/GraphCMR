@@ -9,7 +9,7 @@ import config
 from utils.imutils import convert_bbox_centre_hw_to_corners
 
 class SportsVideosEvalDataset(Dataset):
-    def __init__(self, dataset_path, img_wh):
+    def __init__(self, dataset_path, img_wh, bbox_scale_factor=1.2):
         super(SportsVideosEvalDataset, self).__init__()
 
         # Data
@@ -19,10 +19,13 @@ class SportsVideosEvalDataset(Dataset):
         self.vertices = data['vertices']
         self.body_shapes = data['shapes']
         self.genders = data['genders']
+        self.bbox_centres = data['centres']  # Tight bounding box centre
+        self.bbox_whs = data['whs']  # Tight bounding box width/height
 
         assert len(self.frame_paths) == len(self.vertices) == len(self.body_shapes) == len(self.genders)
 
         self.img_wh = img_wh
+        self.bbox_scale_factor = bbox_scale_factor
         self.normalize_img = Normalize(mean=config.IMG_NORM_MEAN, std=config.IMG_NORM_STD)
 
     def __len__(self):
