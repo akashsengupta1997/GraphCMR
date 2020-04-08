@@ -6,6 +6,7 @@ from torch.utils.data import Dataset
 from torchvision.transforms import Normalize
 
 import config
+from utils.imutils import convert_bbox_centre_hw_to_corners
 
 class SportsVideosEvalDataset(Dataset):
     def __init__(self, dataset_path, img_wh):
@@ -31,11 +32,20 @@ class SportsVideosEvalDataset(Dataset):
         if torch.is_tensor(index):
             index = index.tolist()
 
-        # Inputs
+        # Input image - need to crop and resize because annoyingly, for sports videos dataset,
+        # the frames in the cropped_frames dir are not actually tightly cropped frames.
         frame_path = self.frame_paths[index]
         img = cv2.cvtColor(cv2.imread(frame_path), cv2.COLOR_BGR2RGB)
+        bbox_centre = self.bbox_centres[index]
+        bbox_wh = self.bbox_whs[index] * self.bbox_scale_factor
+        bbox_corners = convert_bbox_centre_hw_to_corners(bbox_centre, bbox_wh, bbox_wh)
+        top_left = bbox_corners[:2].astype(np.int16)
+        bottom_right = bbox_corners[2:].astype(np.int16)
+        top_left[top_left < 0] = 0
+        bottom_right[bottom_right < 0] = 0
+        img = img[top_left[0]: bottom_right[0], top_left[1]: bottom_right[1]]
         img = cv2.resize(img, (self.img_wh, self.img_wh), interpolation=cv2.INTER_LINEAR)
-        img = np.transpose(img, [2, 0, 1])/255.0
+        img = np.transpose(img, [2, 0, 1]) / 255.0
 
         # Targets
         vertices = self.vertices[index]
