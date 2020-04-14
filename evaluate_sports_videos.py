@@ -11,10 +11,12 @@ import cv2
 
 import config
 from utils import Mesh
-from models import CMR
+from models import CMR, NMRRenderer
 from models.smpl_from_lib import SMPL
 from utils.pose_utils import compute_similarity_transform_batch, scale_and_translation_transform_batch
-from utils.cam_utils import orthographic_project_torch, undo_keypoint_normalisation
+from utils.cam_utils import orthographic_project_torch, undo_keypoint_normalisation, \
+    get_intrinsics_matrix, batch_convert_weak_perspective_to_camera_translation
+from utils.label_conversions import convert_multiclass_to_binary_labels_torch
 from datasets.sports_videos_eval_dataset import SportsVideosEvalDataset
 
 
@@ -67,6 +69,31 @@ def evaluate_single_in_multitasknet_sports_videos(model,
         pvet_scale_corrected_sum = 0.0
         pvet_scale_corrected_per_frame = []
 
+    if 'silhouette_iou' in metrics:
+        # Set-up NMR renderer to render silhouettes from predicted vertex meshes.
+        # Assuming camera rotation is identity (since it is dealt with by global_orients)
+        cam_K = get_intrinsics_matrix(config.INPUT_RES, config.INPUT_RES,
+                                      config.FOCAL_LENGTH)
+        cam_K = torch.from_numpy(cam_K.astype(np.float32)).to(device)
+        cam_R = torch.eye(3).to(device)
+        cam_K = cam_K[None, :, :]
+        cam_R = cam_R[None, :, :]
+        nmr_parts_renderer = NMRRenderer(1,
+                                         cam_K,
+                                         cam_R,
+                                         config.INPUT_RES,
+                                         rend_parts_seg=True).to(device)
+        num_true_positives_smpl = 0.0
+        num_false_positives_smpl = 0.0
+        num_true_negatives_smpl = 0.0
+        num_false_negatives_smpl = 0.0
+        num_true_positives_graph = 0.0
+        num_false_positives_graph = 0.0
+        num_true_negatives_graph = 0.0
+        num_false_negatives_graph = 0.0
+        silhouette_iou_smpl_per_frame = []
+        silhouette_iou_graph_per_frame = []
+
     num_samples = 0
     num_vertices = 6890
 
@@ -100,6 +127,19 @@ def evaluate_single_in_multitasknet_sports_videos(model,
         pred_reposed_smpl_output = smpl(betas=pred_betas)
         pred_reposed_vertices = pred_reposed_smpl_output.vertices
 
+        pred_camera = pred_camera.cpu().detach().numpy()
+        if 'silhouette_iou' in metrics:
+            pred_cam_ts = batch_convert_weak_perspective_to_camera_translation(pred_camera,
+                                                                               config.FOCAL_LENGTH,
+                                                                               config.INPUT_RES)
+            pred_cam_ts = torch.from_numpy(pred_cam_ts).float().to(device)
+            part_seg = nmr_parts_renderer(pred_vertices, pred_cam_ts.unsqueeze(0))
+            pred_silhouette = convert_multiclass_to_binary_labels_torch(part_seg)
+            pred_silhouette = pred_silhouette.cpu().detach().numpy()
+            part_seg_smpl = nmr_parts_renderer(pred_vertices_smpl, pred_cam_ts.unsqueeze(0))
+            pred_silhouette_smpl = convert_multiclass_to_binary_labels_torch(part_seg_smpl)
+            pred_silhouette_smpl = pred_silhouette_smpl.cpu().detach().numpy()
+
         # Numpy-fying
         target_vertices = target_vertices.cpu().detach().numpy()
         target_reposed_vertices = target_reposed_vertices.cpu().detach().numpy()
@@ -111,7 +151,6 @@ def evaluate_single_in_multitasknet_sports_videos(model,
         pred_reposed_vertices = pred_reposed_vertices.cpu().detach().numpy()
         pred_rotmat = pred_rotmat.cpu().detach().numpy()
         pred_betas = pred_betas.cpu().detach().numpy()
-        pred_camera = pred_camera.cpu().detach().numpy()
 
         # ------------------------------- METRICS -------------------------------
         if 'pve' in metrics:
@@ -155,13 +194,60 @@ def evaluate_single_in_multitasknet_sports_videos(model,
             pvet_sum += np.sum(pvet_batch)
             pvet_per_frame.append(np.mean(pvet_batch, axis=-1))
 
-        # Procrustes analysis
+        # Scale and translation correction
         if 'pve-t_scale_corrected' in metrics:
             pred_reposed_vertices_sc = compute_similarity_transform_batch(pred_reposed_vertices,
                                                                           target_reposed_vertices)
             pvet_sc_batch = np.linalg.norm(pred_reposed_vertices_sc - target_reposed_vertices, axis=-1)  # (1, 6890)
             pvet_scale_corrected_sum += np.sum(pvet_sc_batch)  # scalar
             pvet_scale_corrected_per_frame.append(np.mean(pvet_sc_batch, axis=-1))
+
+        if 'silhouette_iou' in metrics:
+            pred_silhouette = np.round(pred_silhouette).astype(np.bool)
+            target_silhouette = np.round(target_silhouette).astype(np.bool)
+
+            true_positive = np.logical_and(pred_silhouette, target_silhouette)
+            false_positive = np.logical_and(pred_silhouette,
+                                            np.logical_not(target_silhouette))
+            true_negative = np.logical_and(np.logical_not(pred_silhouette),
+                                           np.logical_not(target_silhouette))
+            false_negative = np.logical_and(np.logical_not(pred_silhouette),
+                                            target_silhouette)
+
+            num_tp = int(np.sum(true_positive))
+            num_fp = int(np.sum(false_positive))
+            num_tn = int(np.sum(true_negative))
+            num_fn = int(np.sum(false_negative))
+
+            num_true_positives_graph += num_tp
+            num_false_positives_graph += num_fp
+            num_true_negatives_graph += num_tn
+            num_false_negatives_graph += num_fn
+
+            silhouette_iou_graph_per_frame.append(num_tp / (num_tp + num_fp + num_fn))
+
+            pred_silhouette_smpl = np.round(pred_silhouette_smpl).astype(np.bool)
+            target_silhouette = np.round(target_silhouette).astype(np.bool)
+
+            true_positive = np.logical_and(pred_silhouette_smpl, target_silhouette)
+            false_positive = np.logical_and(pred_silhouette_smpl,
+                                            np.logical_not(target_silhouette))
+            true_negative = np.logical_and(np.logical_not(pred_silhouette_smpl),
+                                           np.logical_not(target_silhouette))
+            false_negative = np.logical_and(np.logical_not(pred_silhouette_smpl),
+                                            target_silhouette)
+
+            num_tp = int(np.sum(true_positive))
+            num_fp = int(np.sum(false_positive))
+            num_tn = int(np.sum(true_negative))
+            num_fn = int(np.sum(false_negative))
+
+            num_true_positives_smpl += num_tp
+            num_false_positives_smpl += num_fp
+            num_true_negatives_smpl += num_tn
+            num_false_negatives_smpl += num_fn
+
+            silhouette_iou_smpl_per_frame.append(num_tp / (num_tp + num_fp + num_fn))
 
         num_samples += target_shape.shape[0]
 
@@ -177,47 +263,55 @@ def evaluate_single_in_multitasknet_sports_videos(model,
             vis_imgs = np.transpose(vis_imgs, [0, 2, 3, 1])
 
             plt.figure(figsize=(12, 8))
-            plt.subplot(331)
+            plt.subplot(341)
             plt.imshow(vis_imgs[0])
 
-            plt.subplot(332)
+            plt.subplot(342)
             plt.imshow(vis_imgs[0])
             plt.scatter(pred_vertices_projected2d[0, :, 0], pred_vertices_projected2d[0, :, 1], s=0.1, c='r')
 
-            plt.subplot(333)
+            plt.subplot(343)
             plt.imshow(vis_imgs[0])
             plt.scatter(pred_vertices_smpl_projected2d[0, :, 0], pred_vertices_smpl_projected2d[0, :, 1], s=0.1, c='r')
 
-            plt.subplot(334)
+            if 'silhouette_iou' in metrics:
+                plt.subplot(344)
+                plt.imshow(pred_silhouette[0].astype(np.int16) -
+                           target_silhouette[0].astype(np.int16))
+                plt.subplot(345)
+                plt.imshow(pred_silhouette_smpl[0].astype(np.int16) -
+                           target_silhouette[0].astype(np.int16))
+
+            plt.subplot(346)
             plt.scatter(target_vertices[0, :, 0], target_vertices[0, :, 1], s=0.1, c='b')
             plt.scatter(pred_vertices[0, :, 0], pred_vertices[0, :, 1], s=0.05, c='r')
             plt.gca().invert_yaxis()
             plt.gca().set_aspect('equal', adjustable='box')
 
-            plt.subplot(335)
+            plt.subplot(347)
             plt.scatter(target_vertices[0, :, 0], target_vertices[0, :, 1], s=0.1, c='b')
             plt.scatter(pred_vertices_smpl[0, :, 0], pred_vertices_smpl[0, :, 1], s=0.05, c='r')
             plt.gca().invert_yaxis()
             plt.gca().set_aspect('equal', adjustable='box')
 
-            plt.subplot(336)
+            plt.subplot(348)
             plt.scatter(target_vertices[0, :, 0], target_vertices[0, :, 1], s=0.1, c='b')
             plt.scatter(pred_vertices_pa[0, :, 0], pred_vertices_pa[0, :, 1], s=0.05, c='r')
             plt.gca().invert_yaxis()
             plt.gca().set_aspect('equal', adjustable='box')
 
-            plt.subplot(337)
+            plt.subplot(349)
             plt.scatter(target_vertices[0, :, 0], target_vertices[0, :, 1], s=0.1, c='b')
             plt.scatter(pred_vertices_smpl_pa[0, :, 0], pred_vertices_smpl_pa[0, :, 1], s=0.05, c='r')
             plt.gca().invert_yaxis()
             plt.gca().set_aspect('equal', adjustable='box')
 
-            plt.subplot(338)
+            plt.subplot(3, 4, 10)
             plt.scatter(target_reposed_vertices[0, :, 0], target_reposed_vertices[0, :, 1], s=0.1, c='b')
             plt.scatter(pred_reposed_vertices[0, :, 0], pred_reposed_vertices[0, :, 1], s=0.05, c='r')
             plt.gca().set_aspect('equal', adjustable='box')
 
-            plt.subplot(339)
+            plt.subplot(3, 4, 11)
             plt.scatter(target_reposed_vertices[0, :, 0], target_reposed_vertices[0, :, 1], s=0.1, c='b')
             plt.scatter(pred_reposed_vertices_sc[0, :, 0], pred_reposed_vertices_sc[0, :, 1], s=0.05, c='r')
             plt.gca().set_aspect('equal', adjustable='box')
@@ -287,6 +381,24 @@ def evaluate_single_in_multitasknet_sports_videos(model,
         pvet_scale_corrected_per_frame = np.concatenate(pvet_scale_corrected_per_frame, axis=0)
         np.save(os.path.join(save_path, 'pvet_scale_corrected_per_frame.npy'), pvet_scale_corrected_per_frame)
 
+    if 'silhouette_iou' in metrics:
+        mean_iou_graph = num_true_positives_graph / (
+                num_true_positives_graph + num_false_negatives_graph + num_false_positives_graph)
+        global_acc_graph = (num_true_positives_graph + num_true_negatives_graph) / (
+                num_true_positives_graph + num_true_negatives_graph + num_false_negatives_graph + num_false_positives_graph)
+        mean_iou_smpl = num_true_positives_smpl / (
+                num_true_positives_smpl + num_false_negatives_smpl + num_false_positives_smpl)
+        global_acc_smpl = (num_true_positives_smpl + num_true_negatives_smpl) / (
+                num_true_positives_smpl + num_true_negatives_smpl + num_false_negatives_smpl + num_false_positives_smpl)
+        np.save(os.path.join(save_path, 'silhouette_iou_per_frame.npy'),
+                silhouette_iou_smpl_per_frame)
+        np.save(os.path.join(save_path, 'silhouette_iou_graph_per_frame.npy'),
+                silhouette_iou_graph_per_frame)
+        print('Mean IOU SMPL: {:.3f}'.format(mean_iou_smpl))
+        print('Global Acc SMPL: {:.3f}'.format(global_acc_smpl))
+        print('Mean IOU Graph: {:.3f}'.format(mean_iou_graph))
+        print('Global Acc Graph: {:.3f}'.format(global_acc_graph))
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -314,7 +426,8 @@ if __name__ == '__main__':
     print("Eval examples found:", len(dataset))
 
     # Metrics
-    metrics = ['pve', 'pve_scale_corrected', 'pve_pa', 'pve-t', 'pve-t_scale_corrected']
+    metrics = ['pve', 'pve_scale_corrected', 'pve_pa', 'pve-t', 'pve-t_scale_corrected',
+               'silhouette_iou']
 
     save_path = '/data/cvfs/as2562/GraphCMR/evaluations/sports_videos_final_dataset'
     if not os.path.exists(save_path):
