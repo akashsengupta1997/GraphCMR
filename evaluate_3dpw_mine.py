@@ -372,6 +372,8 @@ def evaluate_single_in_multitasknet_3dpw(model,
         print('PVE SMPL: {:.5f}'.format(pve_smpl))
         pve_graph = pve_graph_sum / (num_samples * num_vertices)
         print('PVE GRAPH: {:.5f}'.format(pve_graph))
+        pve_smpl_per_frame = np.concatenate(pve_smpl_per_frame, axis=0)
+        pve_graph_per_frame = np.concatenate(pve_graph_per_frame, axis=0)
         np.save(os.path.join(save_path, 'pve_per_frame.npy'), pve_smpl_per_frame)
         np.save(os.path.join(save_path, 'pve_graph_per_frame.npy'), pve_graph_per_frame)
 
@@ -380,6 +382,8 @@ def evaluate_single_in_multitasknet_3dpw(model,
         print('PVE SC SMPL: {:.5f}'.format(pve_sc_smpl))
         pve_sc_graph = pve_scale_corrected_graph_sum / (num_samples * num_vertices)
         print('PVE SC GRAPH: {:.5f}'.format(pve_sc_graph))
+        pve_scale_corrected_smpl_per_frame = np.concatenate(pve_scale_corrected_smpl_per_frame, axis=0)
+        pve_scale_corrected_graph_per_frame = np.concatenate(pve_scale_corrected_graph_per_frame, axis=0)
         np.save(os.path.join(save_path, 'pve_scale_corrected_per_frame.npy'),
                 pve_scale_corrected_smpl_per_frame)
         np.save(os.path.join(save_path, 'pve_scale_corrected_graph_per_frame.npy'),
@@ -390,17 +394,21 @@ def evaluate_single_in_multitasknet_3dpw(model,
         print('PVE PA SMPL: {:.5f}'.format(pve_pa_smpl))
         pve_pa_graph = pve_pa_graph_sum / (num_samples * num_vertices)
         print('PVE PA GRAPH: {:.5f}'.format(pve_pa_graph))
+        pve_pa_smpl_per_frame = np.concatenate(pve_pa_smpl_per_frame, axis=0)
+        pve_pa_graph_per_frame = np.concatenate(pve_pa_graph_per_frame, axis=0)
         np.save(os.path.join(save_path, 'pve_pa_per_frame.npy'), pve_pa_smpl_per_frame)
         np.save(os.path.join(save_path, 'pve_pa_graph_per_frame.npy'), pve_pa_graph_per_frame)
 
     if 'pve-t' in metrics:
         pvet = pvet_sum / (num_samples * num_vertices)
         print('PVE-T: {:.5f}'.format(pvet))
+        pvet_per_frame = np.concatenate(pvet_per_frame, axis=0)
         np.save(os.path.join(save_path, 'pvet_per_frame.npy'), pvet_per_frame)
 
     if 'pve-t_scale_corrected' in metrics:
         pvet_sc = pvet_scale_corrected_sum / (num_samples * num_vertices)
         print('PVE-T SC: {:.5f}'.format(pvet_sc))
+        pvet_scale_corrected_per_frame = np.concatenate(pvet_scale_corrected_per_frame, axis=0)
         np.save(os.path.join(save_path, 'pvet_scale_corrected_per_frame.npy'),
                 pvet_scale_corrected_per_frame)
 
@@ -409,6 +417,8 @@ def evaluate_single_in_multitasknet_3dpw(model,
         print('MPJPE SMPL: {:.5f}'.format(mpjpe_smpl))
         mpjpe_graph = mpjpe_graph_sum / (num_samples * num_joints3d)
         print('MPJPE GRAPH: {:.5f}'.format(mpjpe_graph))
+        mpjpe_smpl_per_frame = np.concatenate(mpjpe_smpl_per_frame, axis=0)
+        mpjpe_graph_per_frame = np.concatenate(mpjpe_graph_per_frame, axis=0)
         np.save(os.path.join(save_path, 'mpjpe_per_frame.npy'), mpjpe_smpl_per_frame)
         np.save(os.path.join(save_path, 'mpjpe_graph_per_frame.npy'), mpjpe_graph_per_frame)
 
@@ -417,6 +427,10 @@ def evaluate_single_in_multitasknet_3dpw(model,
         print('MPJPE SC SMPL: {:.5f}'.format(mpjpe_sc_smpl))
         mpjpe_sc_graph = mpjpe_scale_corrected_graph_sum / (num_samples * num_joints3d)
         print('MPJPE SC GRAPH: {:.5f}'.format(mpjpe_sc_graph))
+        mpjpe_scale_corrected_smpl_per_frame = np.concatenate(
+            mpjpe_scale_corrected_smpl_per_frame, axis=0)
+        mpjpe_scale_corrected_graph_per_frame = np.concatenate(
+            mpjpe_scale_corrected_graph_per_frame, axis=0)
         np.save(os.path.join(save_path, 'mpjpe_scale_corrected_per_frame.npy'),
                 mpjpe_scale_corrected_smpl_per_frame)
         np.save(os.path.join(save_path, 'mpjpe_scale_corrected_graph_per_frame.npy'),
@@ -427,6 +441,8 @@ def evaluate_single_in_multitasknet_3dpw(model,
         print('Rec Err SMPL: {:.5f}'.format(j3d_rec_err_smpl))
         j3d_rec_err_graph = j3d_rec_err_graph_sum / (num_samples * num_joints3d)
         print('Rec Err GRAPH: {:.5f}'.format(j3d_rec_err_graph))
+        j3d_rec_err_smpl_per_frame = np.concatenate(j3d_rec_err_smpl_per_frame, axis=0)
+        j3d_rec_err_graph_per_frame = np.concatenate(j3d_rec_err_graph_per_frame, axis=0)
         np.save(os.path.join(save_path, 'j3d_rec_err_per_frame.npy'),
                 j3d_rec_err_smpl_per_frame)
         np.save(os.path.join(save_path, 'j3d_rec_err_graph_per_frame.npy'),
