@@ -210,7 +210,7 @@ def evaluate_single_in_multitasknet_h36m(model,
                 pred_reposed_vertices_sc - target_reposed_vertices,
                 axis=-1)  # (bs, 6890)
             pvet_scale_corrected_sum += np.sum(pvet_scale_corrected_batch)  # scalar
-            pvet_scale_corrected_per_frame.append(np.mean(pvet_sc_batch, axis=-1))
+            pvet_scale_corrected_per_frame.append(np.mean(pvet_scale_corrected_batch, axis=-1))
 
         if 'mpjpe' in metrics:
             mpjpe_smpl_batch = np.linalg.norm(pred_joints_smpl_h36mlsp - target_joints_h36mlsp,
