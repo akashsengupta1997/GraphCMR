@@ -50,32 +50,47 @@ def evaluate_single_in_multitasknet_h36m(model,
     if 'pve' in metrics:
         pve_smpl_sum = 0.0
         pve_graph_sum = 0.0
+        pve_smpl_per_frame = []
+        pve_graph_per_frame = []
 
     if 'pve_scale_corrected' in metrics:
         pve_scale_corrected_smpl_sum = 0.0
         pve_scale_corrected_graph_sum = 0.0
+        pve_scale_corrected_smpl_per_frame = []
+        pve_scale_corrected_graph_per_frame = []
 
     if 'pve_pa' in metrics:
         pve_pa_smpl_sum = 0.0
         pve_pa_graph_sum = 0.0
+        pve_pa_smpl_per_frame = []
+        pve_pa_graph_per_frame = []
 
     if 'pve-t' in metrics:
         pvet_sum = 0.0
+        pvet_per_frame = []
 
     if 'pve-t_scale_corrected' in metrics:
         pvet_scale_corrected_sum = 0.0
+        pvet_scale_corrected_per_frame = []
 
     if 'mpjpe' in metrics:
         mpjpe_smpl_sum = 0.0
         mpjpe_graph_sum = 0.0
+        mpjpe_smpl_per_frame = []
+        mpjpe_graph_per_frame = []
 
     if 'mpjpe_scale_corrected' in metrics:
         mpjpe_scale_corrected_smpl_sum = 0.0
         mpjpe_scale_corrected_graph_sum = 0.0
+        mpjpe_scale_corrected_smpl_per_frame = []
+        mpjpe_scale_corrected_graph_per_frame = []
 
     if 'j3d_rec_err' in metrics:
         j3d_rec_err_smpl_sum = 0.0
         j3d_rec_err_graph_sum = 0.0
+        j3d_rec_err_smpl_per_frame = []
+        j3d_rec_err_graph_per_frame = []
+
 
     if 'pve_2d' in metrics:
         pve_2d_smpl_sum = 0.0
@@ -147,8 +162,10 @@ def evaluate_single_in_multitasknet_h36m(model,
             pve_graph_batch = np.linalg.norm(pred_vertices - target_vertices, axis=-1)
             pve_smpl_sum += np.sum(pve_smpl_batch)  # scalar
             pve_graph_sum += np.sum(pve_graph_batch)
+            pve_smpl_per_frame.append(np.mean(pve_smpl_batch, axis=-1))
+            pve_graph_per_frame.append(np.mean(pve_graph_batch, axis=-1))
 
-        # Scale and translation correction
+            # Scale and translation correction
         if 'pve_scale_corrected' in metrics:
             pred_vertices_smpl_sc = scale_and_translation_transform_batch(pred_vertices_smpl,
                                                                           target_vertices)
@@ -160,8 +177,10 @@ def evaluate_single_in_multitasknet_h36m(model,
                                                 axis=-1)  # (1, 6890)
             pve_scale_corrected_smpl_sum += np.sum(pve_sc_smpl_batch)  # scalar
             pve_scale_corrected_graph_sum += np.sum(pve_sc_graph_batch)  # scalar
+            pve_scale_corrected_smpl_per_frame.append(np.mean(pve_sc_smpl_batch, axis=-1))
+            pve_scale_corrected_graph_per_frame.append(np.mean(pve_sc_graph_batch, axis=-1))
 
-        # Procrustes analysis
+            # Procrustes analysis
         if 'pve_pa' in metrics:
             pred_vertices_smpl_pa = compute_similarity_transform_batch(pred_vertices_smpl,
                                                                        target_vertices)
@@ -173,13 +192,16 @@ def evaluate_single_in_multitasknet_h36m(model,
                                                 axis=-1)  # (1, 6890)
             pve_pa_smpl_sum += np.sum(pve_pa_smpl_batch)  # scalar
             pve_pa_graph_sum += np.sum(pve_pa_graph_batch)  # scalar
+            pve_pa_smpl_per_frame.append(np.mean(pve_pa_smpl_batch, axis=-1))
+            pve_pa_graph_per_frame.append(np.mean(pve_pa_graph_batch, axis=-1))
 
         if 'pve-t' in metrics:
             pvet_batch = np.linalg.norm(pred_reposed_vertices - target_reposed_vertices,
                                         axis=-1)
             pvet_sum += np.sum(pvet_batch)
+            pvet_per_frame.append(np.mean(pvet_batch, axis=-1))
 
-        # Scale and translation correction
+            # Scale and translation correction
         if 'pve-t_scale_corrected' in metrics:
             pred_reposed_vertices_sc = scale_and_translation_transform_batch(
                 pred_reposed_vertices,
@@ -188,6 +210,7 @@ def evaluate_single_in_multitasknet_h36m(model,
                 pred_reposed_vertices_sc - target_reposed_vertices,
                 axis=-1)  # (bs, 6890)
             pvet_scale_corrected_sum += np.sum(pvet_scale_corrected_batch)  # scalar
+            pvet_scale_corrected_per_frame.append(np.mean(pvet_sc_batch, axis=-1))
 
         if 'mpjpe' in metrics:
             mpjpe_smpl_batch = np.linalg.norm(pred_joints_smpl_h36mlsp - target_joints_h36mlsp,
@@ -196,8 +219,10 @@ def evaluate_single_in_multitasknet_h36m(model,
                                                axis=-1)  # (bs, 14)
             mpjpe_smpl_sum += np.sum(mpjpe_smpl_batch)
             mpjpe_graph_sum += np.sum(mpjpe_graph_batch)
+            mpjpe_smpl_per_frame.append(np.mean(mpjpe_smpl_batch, axis=-1))
+            mpjpe_graph_per_frame.append(np.mean(mpjpe_graph_batch, axis=-1))
 
-        # Scale and translation correction
+            # Scale and translation correction
         if 'mpjpe_scale_corrected' in metrics:
             pred_joints_smpl_h36mlsp_sc = scale_and_translation_transform_batch(
                 pred_joints_smpl_h36mlsp,
@@ -212,8 +237,12 @@ def evaluate_single_in_multitasknet_h36m(model,
                 axis=-1)  # (bs, 14)
             mpjpe_scale_corrected_smpl_sum += np.sum(mpjpe_scale_corrected_smpl_batch)
             mpjpe_scale_corrected_graph_sum += np.sum(mpjpe_scale_corrected_graph_batch)
+            mpjpe_scale_corrected_smpl_per_frame.append(
+                np.mean(mpjpe_scale_corrected_smpl_batch, axis=-1))
+            mpjpe_scale_corrected_graph_per_frame.append(
+                np.mean(mpjpe_scale_corrected_graph_batch, axis=-1))
 
-        # Procrustes analysis
+            # Procrustes analysis
         if 'j3d_rec_err' in metrics:
             pred_joints_smpl_h36mlsp_pa = compute_similarity_transform_batch(
                 pred_joints_smpl_h36mlsp,
@@ -226,6 +255,8 @@ def evaluate_single_in_multitasknet_h36m(model,
                 pred_joints_h36mlsp_pa - target_joints_h36mlsp, axis=-1)  # (bs, 14)
             j3d_rec_err_smpl_sum += np.sum(j3d_rec_err_smpl_batch)
             j3d_rec_err_graph_sum += np.sum(j3d_rec_err_graph_batch)
+            j3d_rec_err_smpl_per_frame.append(np.mean(j3d_rec_err_smpl_batch, axis=-1))
+            j3d_rec_err_graph_per_frame.append(np.mean(j3d_rec_err_graph_batch, axis=-1))
 
         if 'pve_2d' in metrics:
             pred_vertices_smpl_2d = pred_vertices_smpl[:, :, :2]
@@ -359,44 +390,65 @@ def evaluate_single_in_multitasknet_h36m(model,
         print('PVE SMPL: {:.5f}'.format(pve_smpl))
         pve_graph = pve_graph_sum / (num_samples * num_vertices)
         print('PVE GRAPH: {:.5f}'.format(pve_graph))
+        np.save(os.path.join(save_path, 'pve_per_frame.npy'), pve_smpl_per_frame)
+        np.save(os.path.join(save_path, 'pve_graph_per_frame.npy'), pve_graph_per_frame)
 
     if 'pve_scale_corrected' in metrics:
         pve_sc_smpl = pve_scale_corrected_smpl_sum / (num_samples * num_vertices)
         print('PVE SC SMPL: {:.5f}'.format(pve_sc_smpl))
         pve_sc_graph = pve_scale_corrected_graph_sum / (num_samples * num_vertices)
         print('PVE SC GRAPH: {:.5f}'.format(pve_sc_graph))
+        np.save(os.path.join(save_path, 'pve_scale_corrected_per_frame.npy'),
+                pve_scale_corrected_smpl_per_frame)
+        np.save(os.path.join(save_path, 'pve_scale_corrected_graph_per_frame.npy'),
+                pve_scale_corrected_graph_per_frame)
 
     if 'pve_pa' in metrics:
         pve_pa_smpl = pve_pa_smpl_sum / (num_samples * num_vertices)
         print('PVE PA SMPL: {:.5f}'.format(pve_pa_smpl))
         pve_pa_graph = pve_pa_graph_sum / (num_samples * num_vertices)
         print('PVE PA GRAPH: {:.5f}'.format(pve_pa_graph))
+        np.save(os.path.join(save_path, 'pve_pa_per_frame.npy'), pve_pa_smpl_per_frame)
+        np.save(os.path.join(save_path, 'pve_pa_graph_per_frame.npy'), pve_pa_graph_per_frame)
 
     if 'pve-t' in metrics:
         pvet = pvet_sum / (num_samples * num_vertices)
         print('PVE-T: {:.5f}'.format(pvet))
+        np.save(os.path.join(save_path, 'pvet_per_frame.npy'), pvet_per_frame)
 
     if 'pve-t_scale_corrected' in metrics:
         pvet_sc = pvet_scale_corrected_sum / (num_samples * num_vertices)
         print('PVE-T SC: {:.5f}'.format(pvet_sc))
+        np.save(os.path.join(save_path, 'pvet_scale_corrected_per_frame.npy'),
+                pvet_scale_corrected_per_frame)
 
     if 'mpjpe' in metrics:
         mpjpe_smpl = mpjpe_smpl_sum / (num_samples * num_joints3d)
         print('MPJPE SMPL: {:.5f}'.format(mpjpe_smpl))
         mpjpe_graph = mpjpe_graph_sum / (num_samples * num_joints3d)
         print('MPJPE GRAPH: {:.5f}'.format(mpjpe_graph))
+        np.save(os.path.join(save_path, 'mpjpe_per_frame.npy'), mpjpe_smpl_per_frame)
+        np.save(os.path.join(save_path, 'mpjpe_graph_per_frame.npy'), mpjpe_graph_per_frame)
 
     if 'mpjpe_scale_corrected' in metrics:
         mpjpe_sc_smpl = mpjpe_scale_corrected_smpl_sum / (num_samples * num_joints3d)
         print('MPJPE SC SMPL: {:.5f}'.format(mpjpe_sc_smpl))
         mpjpe_sc_graph = mpjpe_scale_corrected_graph_sum / (num_samples * num_joints3d)
         print('MPJPE SC GRAPH: {:.5f}'.format(mpjpe_sc_graph))
+        np.save(os.path.join(save_path, 'mpjpe_scale_corrected_per_frame.npy'),
+                mpjpe_scale_corrected_smpl_per_frame)
+        np.save(os.path.join(save_path, 'mpjpe_scale_corrected_graph_per_frame.npy'),
+                mpjpe_scale_corrected_graph_per_frame)
 
     if 'j3d_rec_err' in metrics:
         j3d_rec_err_smpl = j3d_rec_err_smpl_sum / (num_samples * num_joints3d)
         print('Rec Err SMPL: {:.5f}'.format(j3d_rec_err_smpl))
         j3d_rec_err_graph = j3d_rec_err_graph_sum / (num_samples * num_joints3d)
         print('Rec Err GRAPH: {:.5f}'.format(j3d_rec_err_graph))
+        np.save(os.path.join(save_path, 'j3d_rec_err_per_frame.npy'),
+                j3d_rec_err_smpl_per_frame)
+        np.save(os.path.join(save_path, 'j3d_rec_err_graph_per_frame.npy'),
+                j3d_rec_err_graph_per_frame)
 
     if 'pve_2d' in metrics:
         pve_2d_smpl = pve_2d_smpl_sum / (num_samples * num_vertices)
