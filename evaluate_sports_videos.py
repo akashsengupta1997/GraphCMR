@@ -446,6 +446,7 @@ if __name__ == '__main__':
     parser.add_argument('--checkpoint', default=None, help='Path to network checkpoint')
     parser.add_argument('--gpu', default='0', type=str)
     parser.add_argument('--num_workers', default=4, type=int, help='Number of processes for data loading')
+    parser.add_argument('--path_correction', action='store_true')
     args = parser.parse_args()
 
     # Device
@@ -462,8 +463,9 @@ if __name__ == '__main__':
     model.eval()
 
     # Setup evaluation dataset
-    dataset_path = '/scratch2/as2562/datasets/sports_videos_smpl/final_dataset'
-    dataset = SportsVideosEvalDataset(dataset_path, img_wh=config.INPUT_RES)
+    dataset_path = '/scratch/as2562/datasets/sports_videos_smpl/final_dataset'
+    dataset = SportsVideosEvalDataset(dataset_path, img_wh=config.INPUT_RES,
+                                      path_correction=args.path_correction)
     print("Eval examples found:", len(dataset))
 
     # Metrics
