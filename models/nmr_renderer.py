@@ -5,7 +5,7 @@ import numpy as np
 import neural_renderer as nr
 import config
 
-from models import SMPL
+from models.smpl_from_lib import SMPL
 
 
 class NMRRenderer(nn.Module):
