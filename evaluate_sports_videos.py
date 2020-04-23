@@ -27,7 +27,8 @@ def evaluate_single_in_multitasknet_sports_videos(model,
                                                   save_path,
                                                   num_workers=4,
                                                   pin_memory=True,
-                                                  vis_every_n_batches=1):
+                                                  vis_every_n_batches=1,
+                                                  output_img_wh=256):
 
     eval_dataloader = DataLoader(eval_dataset,
                                  batch_size=1,
@@ -72,7 +73,7 @@ def evaluate_single_in_multitasknet_sports_videos(model,
     if 'silhouette_iou' in metrics:
         # Set-up NMR renderer to render silhouettes from predicted vertex meshes.
         # Assuming camera rotation is identity (since it is dealt with by global_orients)
-        cam_K = get_intrinsics_matrix(config.INPUT_RES, config.INPUT_RES,
+        cam_K = get_intrinsics_matrix(output_img_wh, output_img_wh,
                                       config.FOCAL_LENGTH)
         cam_K = torch.from_numpy(cam_K.astype(np.float32)).to(device)
         cam_R = torch.eye(3).to(device)
@@ -81,7 +82,7 @@ def evaluate_single_in_multitasknet_sports_videos(model,
         nmr_parts_renderer = NMRRenderer(1,
                                          cam_K,
                                          cam_R,
-                                         config.INPUT_RES,
+                                         output_img_wh,
                                          rend_parts_seg=True).to(device)
         num_true_positives_smpl = 0.0
         num_false_positives_smpl = 0.0
@@ -94,8 +95,13 @@ def evaluate_single_in_multitasknet_sports_videos(model,
         silhouette_iou_smpl_per_frame = []
         silhouette_iou_graph_per_frame = []
 
+    if 'j2d_l2e' in metrics:
+        j2d_l2e_sum = 0.0
+        j2d_l2e_per_frame = []
+
     num_samples = 0
     num_vertices = 6890
+    num_joints2d = 17
 
     frame_path_per_frame = []
     pose_per_frame = []
@@ -111,6 +117,8 @@ def evaluate_single_in_multitasknet_sports_videos(model,
         target_shape = samples_batch['shape']
         target_shape = target_shape.to(device)
         target_vertices = samples_batch['vertices']
+        target_silhouette = samples_batch['silhouette']
+        target_joints2d_coco = samples_batch['keypoints']
 
         target_gender = samples_batch['gender'][0]
         if target_gender == 'm':
@@ -127,11 +135,19 @@ def evaluate_single_in_multitasknet_sports_videos(model,
         pred_reposed_smpl_output = smpl(betas=pred_betas)
         pred_reposed_vertices = pred_reposed_smpl_output.vertices
 
+        if 'j2d_l2e' in metrics:
+            pred_smpl_output = smpl(betas=pred_betas, body_pose=pred_rotmat[:, 1:],
+                                    global_orient=pred_rotmat[:, 0].unsqueeze(1), pose2rot=False)
+            pred_joints_all = pred_smpl_output.joints
+            pred_joints_coco = pred_joints_all[:, config.ALL_JOINTS_TO_COCO_MAP, :]
+            pred_joints2d_coco = orthographic_project_torch(pred_joints_coco, pred_camera)
+            pred_joints2d_coco = undo_keypoint_normalisation(pred_joints2d_coco, output_img_wh)
+
         pred_camera = pred_camera.cpu().detach().numpy()
         if 'silhouette_iou' in metrics:
             pred_cam_ts = batch_convert_weak_perspective_to_camera_translation(pred_camera,
                                                                                config.FOCAL_LENGTH,
-                                                                               config.INPUT_RES)
+                                                                               output_img_wh)
             pred_cam_ts = torch.from_numpy(pred_cam_ts).float().to(device)
             part_seg = nmr_parts_renderer(pred_vertices, pred_cam_ts.unsqueeze(0))
             pred_silhouette = convert_multiclass_to_binary_labels_torch(part_seg)
@@ -249,6 +265,12 @@ def evaluate_single_in_multitasknet_sports_videos(model,
 
             silhouette_iou_smpl_per_frame.append(num_tp / (num_tp + num_fp + num_fn))
 
+        if 'j2d_l2e' in metrics:
+            j2d_l2e_batch = np.linalg.norm(pred_joints2d_coco - target_joints2d_coco,
+                                           axis=-1)  # (bs, 17)
+            j2d_l2e_sum += np.sum(j2d_l2e_batch)  # scalar
+            j2d_l2e_per_frame.append(np.mean(j2d_l2e_batch, axis=-1))
+
         num_samples += target_shape.shape[0]
 
         frame_path = samples_batch['frame_path']
@@ -281,6 +303,18 @@ def evaluate_single_in_multitasknet_sports_videos(model,
                 plt.subplot(345)
                 plt.imshow(pred_silhouette_smpl[0].astype(np.int16) -
                            target_silhouette[0].astype(np.int16))
+                if 'j2d_l2e' in metrics:
+                    for j in range(target_joints2d_coco.shape[1]):
+                        plt.scatter(target_joints2d_coco[0, j, 0],
+                                    target_joints2d_coco[0, j, 1],
+                                    c='b', s=10.0)
+                        plt.text(target_joints2d_coco[0, j, 0], target_joints2d_coco[0, j, 1],
+                                 str(j))
+                        plt.scatter(pred_joints2d_coco[0, j, 0],
+                                    pred_joints2d_coco[0, j, 1],
+                                    c='r', s=10.0)
+                        plt.text(pred_joints2d_coco[0, j, 0], pred_joints2d_coco[0, j, 1],
+                                 str(j))
 
             plt.subplot(346)
             plt.scatter(target_vertices[0, :, 0], target_vertices[0, :, 1], s=0.1, c='b')
@@ -399,6 +433,13 @@ def evaluate_single_in_multitasknet_sports_videos(model,
         print('Mean IOU Graph: {:.3f}'.format(mean_iou_graph))
         print('Global Acc Graph: {:.3f}'.format(global_acc_graph))
 
+    if 'j2d_l2e' in metrics:
+        j2d_l2e = j2d_l2e_sum / (num_samples * num_joints2d)
+        j2d_l2e_per_frame = np.concatenate(j2d_l2e_per_frame, axis=0)
+        np.save(os.path.join(save_path, 'j2d_l2e_per_frame_per_frame.npy'),
+                j2d_l2e_per_frame)
+        print('J2D L2 Error: {:.5f}'.format(j2d_l2e))
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -427,7 +468,7 @@ if __name__ == '__main__':
 
     # Metrics
     metrics = ['pve', 'pve_scale_corrected', 'pve_pa', 'pve-t', 'pve-t_scale_corrected',
-               'silhouette_iou']
+               'silhouette_iou', 'j2d_l2e']
 
     save_path = '/data/cvfs/as2562/GraphCMR/evaluations/sports_videos_final_dataset'
     if not os.path.exists(save_path):

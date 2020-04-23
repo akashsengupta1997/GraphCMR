@@ -86,6 +86,10 @@ H36M_TO_J14 = [6, 5, 4, 1, 2, 3, 16, 15, 14, 11, 12, 13, 8, 10]
 # Indices to get the 14 LSP joints from the ground truth joints
 J24_TO_J14 = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 18]
 
+ALL_JOINTS_TO_COCO_MAP = [24, 26, 25, 28, 27, 16, 17, 18, 19, 20, 21, 1, 2, 4, 5, 7, 8]  # Using OP Hips
+
+
+
 FOCAL_LENGTH = 5000.
 INPUT_RES = 224
 
