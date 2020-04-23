@@ -159,6 +159,8 @@ def evaluate_single_in_multitasknet_sports_videos(model,
         # Numpy-fying
         target_vertices = target_vertices.cpu().detach().numpy()
         target_reposed_vertices = target_reposed_vertices.cpu().detach().numpy()
+        target_silhouette = target_silhouette.numpy()
+        target_joints2d_coco = target_joints2d_coco.numpy()
 
         pred_vertices = pred_vertices.cpu().detach().numpy()
         pred_vertices_smpl = pred_vertices_smpl.cpu().detach().numpy()
@@ -167,6 +169,7 @@ def evaluate_single_in_multitasknet_sports_videos(model,
         pred_reposed_vertices = pred_reposed_vertices.cpu().detach().numpy()
         pred_rotmat = pred_rotmat.cpu().detach().numpy()
         pred_betas = pred_betas.cpu().detach().numpy()
+        pred_joints2d_coco = pred_joints2d_coco.cpu().detach().numpy()
 
         # ------------------------------- METRICS -------------------------------
         if 'pve' in metrics:
