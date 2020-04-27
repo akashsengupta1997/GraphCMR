@@ -83,9 +83,7 @@ def evaluate_movi_sports(model,
         pred_reposed_vertices = pred_reposed_smpl_output.vertices
 
         # Numpy-fying
-        target_vertices = target_vertices.cpu().detach().numpy()
         target_reposed_vertices = target_reposed_vertices.cpu().detach().numpy()
-        target_joints_h36mlsp = target_joints_h36mlsp.cpu().detach().numpy()
 
         pred_vertices = pred_vertices.cpu().detach().numpy()
         pred_vertices_smpl = pred_vertices_smpl.cpu().detach().numpy()
