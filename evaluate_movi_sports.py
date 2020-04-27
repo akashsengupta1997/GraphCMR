@@ -88,6 +88,9 @@ def evaluate_movi_sports(model,
         pred_vertices_projected2d = pred_vertices_projected2d.cpu().detach().numpy()
         pred_vertices_smpl_projected2d = pred_vertices_smpl_projected2d.cpu().detach().numpy()
         pred_reposed_vertices = pred_reposed_vertices.cpu().detach().numpy()
+        pred_rotmat = pred_rotmat.cpu().detach().numpy()
+        pred_betas = pred_betas.cpu().detach().numpy()
+        pred_camera = pred_camera.cpu().detach().numpy()
 
         # ------------------------------- METRICS -------------------------------
         if 'pve-t' in metrics:
