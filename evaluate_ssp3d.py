@@ -282,7 +282,7 @@ def evaluate_single_in_multitasknet_sports_videos(model,
 
         num_samples += target_shape.shape[0]
 
-        fname = samples_batch['frame_path']
+        fname = samples_batch['fname']
         fname_per_frame .append(fname)
         pose_per_frame.append(pred_rotmat)
         shape_per_frame.append(pred_betas)
@@ -384,8 +384,8 @@ def evaluate_single_in_multitasknet_sports_videos(model,
         print('PVE GRAPH: {:.5f}'.format(pve_graph))
         pve_smpl_per_frame = np.concatenate(pve_smpl_per_frame, axis=0)
         pve_graph_per_frame = np.concatenate(pve_graph_per_frame, axis=0)
-        np.save(os.path.join(save_path, 'pve_per_frame.npy'), pve_smpl_per_frame)
-        np.save(os.path.join(save_path, 'pve_graph_per_frame.npy'), pve_graph_per_frame)
+        np.save(os.path.join(save_path, 'pves_per_frame.npy'), pve_smpl_per_frame)
+        np.save(os.path.join(save_path, 'pves_graph_per_frame.npy'), pve_graph_per_frame)
 
     if 'pves_sc' in metrics:
         pve_sc_smpl = pve_scale_corrected_smpl_sum / (num_samples * num_vertices)
@@ -396,8 +396,8 @@ def evaluate_single_in_multitasknet_sports_videos(model,
                                                             axis=0)
         pve_scale_corrected_graph_per_frame = np.concatenate(pve_scale_corrected_graph_per_frame,
                                                              axis=0)
-        np.save(os.path.join(save_path, 'pve_scale_corrected_per_frame.npy'), pve_scale_corrected_smpl_per_frame)
-        np.save(os.path.join(save_path, 'pve_scale_corrected_graph_per_frame.npy'), pve_scale_corrected_graph_per_frame)
+        np.save(os.path.join(save_path, 'pves_sc_per_frame.npy'), pve_scale_corrected_smpl_per_frame)
+        np.save(os.path.join(save_path, 'pves_sc_graph_per_frame.npy'), pve_scale_corrected_graph_per_frame)
 
     if 'pves_pa' in metrics:
         pve_pa_smpl = pve_pa_smpl_sum / (num_samples * num_vertices)
@@ -406,20 +406,20 @@ def evaluate_single_in_multitasknet_sports_videos(model,
         print('PVE PA GRAPH: {:.5f}'.format(pve_pa_graph))
         pve_pa_smpl_per_frame = np.concatenate(pve_pa_smpl_per_frame, axis=0)
         pve_pa_graph_per_frame = np.concatenate(pve_pa_graph_per_frame, axis=0)
-        np.save(os.path.join(save_path, 'pve_pa_per_frame.npy'), pve_pa_smpl_per_frame)
-        np.save(os.path.join(save_path, 'pve_pa_graph_per_frame.npy'), pve_pa_graph_per_frame)
+        np.save(os.path.join(save_path, 'pves_pa_per_frame.npy'), pve_pa_smpl_per_frame)
+        np.save(os.path.join(save_path, 'pves_pa_graph_per_frame.npy'), pve_pa_graph_per_frame)
 
     if 'pve-ts' in metrics:
         pvet = pvet_sum / (num_samples * num_vertices)
         print('PVE-T: {:.5f}'.format(pvet))
         pvet_per_frame = np.concatenate(pvet_per_frame, axis=0)
-        np.save(os.path.join(save_path, 'pvet_per_frame.npy'), pvet_per_frame)
+        np.save(os.path.join(save_path, 'pve-ts_per_frame.npy'), pvet_per_frame)
 
     if 'pve-ts_sc' in metrics:
         pvet_sc = pvet_scale_corrected_sum / (num_samples * num_vertices)
         print('PVE-T SC: {:.5f}'.format(pvet_sc))
         pvet_scale_corrected_per_frame = np.concatenate(pvet_scale_corrected_per_frame, axis=0)
-        np.save(os.path.join(save_path, 'pvet_scale_corrected_per_frame.npy'), pvet_scale_corrected_per_frame)
+        np.save(os.path.join(save_path, 'pve-ts_sc_frame.npy'), pvet_scale_corrected_per_frame)
 
     if 'silhouette_ious' in metrics:
         mean_iou_graph = num_true_positives_graph / (
@@ -430,9 +430,9 @@ def evaluate_single_in_multitasknet_sports_videos(model,
                 num_true_positives_smpl + num_false_negatives_smpl + num_false_positives_smpl)
         global_acc_smpl = (num_true_positives_smpl + num_true_negatives_smpl) / (
                 num_true_positives_smpl + num_true_negatives_smpl + num_false_negatives_smpl + num_false_positives_smpl)
-        np.save(os.path.join(save_path, 'silhouette_iou_per_frame.npy'),
+        np.save(os.path.join(save_path, 'silhouette_ious_per_frame.npy'),
                 silhouette_iou_smpl_per_frame)
-        np.save(os.path.join(save_path, 'silhouette_iou_graph_per_frame.npy'),
+        np.save(os.path.join(save_path, 'silhouette_ious_graph_per_frame.npy'),
                 silhouette_iou_graph_per_frame)
         print('Mean IOU SMPL: {:.3f}'.format(mean_iou_smpl))
         print('Global Acc SMPL: {:.3f}'.format(global_acc_smpl))
@@ -442,7 +442,7 @@ def evaluate_single_in_multitasknet_sports_videos(model,
     if 'joints2D_l2es' in metrics:
         j2d_l2e = j2d_l2e_sum / (num_samples * num_joints2d)
         j2d_l2e_per_frame = np.concatenate(j2d_l2e_per_frame, axis=0)
-        np.save(os.path.join(save_path, 'j2d_l2e_per_frame_per_frame.npy'),
+        np.save(os.path.join(save_path, 'joints2D_l2es_per_frame_per_frame.npy'),
                 j2d_l2e_per_frame)
         print('J2D L2 Error: {:.5f}'.format(j2d_l2e))
 
